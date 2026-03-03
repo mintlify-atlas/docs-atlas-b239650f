@@ -1,0 +1,144 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Laravel Permission",
+  "projectDescription": "Associate users with roles and permissions in Laravel applications",
+  "theme": "linden",
+  "primaryColor": "#3b82f6",
+  "lightColor": "#60a5fa",
+  "darkColor": "#2563eb",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "prerequisites",
+              "basic-concepts"
+            ]
+          },
+          {
+            "group": "Basic Usage",
+            "pages": [
+              "basic-usage/using-permissions",
+              "basic-usage/using-roles",
+              "basic-usage/assigning-permissions",
+              "basic-usage/checking-permissions",
+              "basic-usage/using-blade-directives",
+              "basic-usage/using-middleware"
+            ]
+          },
+          {
+            "group": "Advanced Usage",
+            "pages": [
+              "advanced-usage/teams-permissions",
+              "advanced-usage/wildcard-permissions",
+              "advanced-usage/multiple-guards",
+              "advanced-usage/caching",
+              "advanced-usage/events",
+              "advanced-usage/seeding",
+              "advanced-usage/custom-models"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/config-file",
+              "configuration/database-tables",
+              "configuration/artisan-commands"
+            ]
+          },
+          {
+            "group": "Best Practices",
+            "pages": [
+              "best-practices/security",
+              "best-practices/performance",
+              "best-practices/testing"
+            ]
+          },
+          {
+            "group": "Additional Resources",
+            "pages": [
+              "troubleshooting",
+              "upgrading",
+              "changelog",
+              "contributing"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Traits",
+            "pages": [
+              "api/traits/has-roles",
+              "api/traits/has-permissions"
+            ]
+          },
+          {
+            "group": "Models",
+            "pages": [
+              "api/models/permission",
+              "api/models/role"
+            ]
+          },
+          {
+            "group": "Middleware",
+            "pages": [
+              "api/middleware/role-middleware",
+              "api/middleware/permission-middleware",
+              "api/middleware/role-or-permission-middleware"
+            ]
+          },
+          {
+            "group": "Helpers",
+            "pages": [
+              "api/helpers"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Role-Based Access Control (RBAC)",
+    "Direct permission assignment to users",
+    "Multiple authentication guards support",
+    "Team-based permissions",
+    "Wildcard permissions",
+    "Permission caching for performance",
+    "Blade directives for authorization",
+    "Route middleware protection",
+    "Artisan commands for management",
+    "Event system for permission changes"
+  ],
+  "publicApiSurface": [
+    "HasRoles trait",
+    "HasPermissions trait",
+    "Permission model",
+    "Role model",
+    "assignRole()",
+    "givePermissionTo()",
+    "hasRole()",
+    "hasPermissionTo()",
+    "can()",
+    "RoleMiddleware",
+    "PermissionMiddleware",
+    "RoleOrPermissionMiddleware",
+    "@role blade directive",
+    "@hasrole blade directive",
+    "@can blade directive",
+    "permission:show command",
+    "permission:create-role command",
+    "permission:create-permission command",
+    "permission:cache-reset command",
+    "getModelForGuard()",
+    "setPermissionsTeamId()",
+    "getPermissionsTeamId()"
+  ]
+}
