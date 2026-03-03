@@ -1,0 +1,327 @@
+---
+title: 'Wildcard Permissions'
+description: 'Use wildcards for flexible permission patterns'
+icon: 'asterisk'
+---
+
+Wildcard permissions allow you to grant permissions using patterns with wildcards (`*`), enabling more flexible and hierarchical permission structures.
+
+## Configuration
+
+Enable wildcard permissions in your `config/permission.php`:
+
+```php config/permission.php
+'enable_wildcard_permission' => true,
+```
+
+<Note>
+  Wildcard permissions are **disabled by default** for performance reasons. Only enable them if you need this functionality.
+</Note>
+
+## Syntax
+
+The wildcard permission system uses two delimiters:
+
+- **Part Delimiter**: `.` (dot) - separates hierarchical parts
+- **Subpart Delimiter**: `,` (comma) - allows multiple values in one part
+- **Wildcard Token**: `*` (asterisk) - matches anything
+
+### Delimiters Defined
+
+```php
+namespace Spatie\Permission;
+
+class WildcardPermission implements Wildcard
+{
+    const WILDCARD_TOKEN = '*';
+    const PART_DELIMITER = '.';
+    const SUBPART_DELIMITER = ',';
+}
+```
+
+## Permission Patterns
+
+### Basic Wildcard
+
+Grant all permissions for a resource:
+
+```php
+// Grant all post permissions
+$user->givePermissionTo('posts.*');
+
+// User now has:
+$user->hasPermissionTo('posts.view');   // true
+$user->hasPermissionTo('posts.create'); // true
+$user->hasPermissionTo('posts.edit');   // true
+$user->hasPermissionTo('posts.delete'); // true
+```
+
+### Hierarchical Wildcards
+
+Create multi-level permission structures:
+
+```php
+// Grant all admin permissions
+$user->givePermissionTo('admin.*');
+
+// Implies:
+$user->hasPermissionTo('admin.users.view');    // true
+$user->hasPermissionTo('admin.users.edit');    // true
+$user->hasPermissionTo('admin.settings.view'); // true
+$user->hasPermissionTo('admin.reports.view');  // true
+```
+
+### Multiple Values (Subparts)
+
+Grant specific permissions across the same hierarchy:
+
+```php
+// Grant view and edit, but not create or delete
+$user->givePermissionTo('posts.view,edit');
+
+// Equivalent to:
+$user->givePermissionTo('posts.view');
+$user->givePermissionTo('posts.edit');
+
+// Checking:
+$user->hasPermissionTo('posts.view');   // true
+$user->hasPermissionTo('posts.edit');   // true
+$user->hasPermissionTo('posts.create'); // false
+$user->hasPermissionTo('posts.delete'); // false
+```
+
+### Complex Patterns
+
+Combine delimiters for advanced patterns:
+
+```php
+// Grant view and edit for posts and comments
+$user->givePermissionTo('posts,comments.view,edit');
+
+// Implies all of:
+$user->hasPermissionTo('posts.view');    // true
+$user->hasPermissionTo('posts.edit');    // true
+$user->hasPermissionTo('comments.view'); // true
+$user->hasPermissionTo('comments.edit'); // true
+```
+
+## How It Works
+
+The wildcard system builds an index of all granted permissions and checks if a requested permission is implied by the wildcard patterns.
+
+### Permission Index
+
+When checking permissions, the package builds an index like this:
+
+```php
+// Given permissions:
+$user->givePermissionTo('admin.*');
+$user->givePermissionTo('posts.view,edit');
+
+// Index structure:
+[
+    'web' => [ // guard name
+        'admin' => [
+            '*' => [
+                '' => true
+            ]
+        ],
+        'posts' => [
+            'view' => [
+                '' => true
+            ],
+            'edit' => [
+                '' => true
+            ]
+        ]
+    ]
+]
+```
+
+### Permission Checking
+
+```php
+// Checking: $user->hasPermissionTo('admin.users.create')
+// 1. Split: ['admin', 'users', 'create']
+// 2. Traverse index: admin -> * (wildcard found)
+// 3. Result: true (wildcard matches remaining parts)
+```
+
+## Practical Examples
+
+### Resource-Based Permissions
+
+```php
+// Define permissions
+Permission::create(['name' => 'posts.*']);
+Permission::create(['name' => 'posts.view']);
+Permission::create(['name' => 'posts.create']);
+Permission::create(['name' => 'posts.edit']);
+Permission::create(['name' => 'posts.delete']);
+
+// Assign wildcard to admin
+$admin->givePermissionTo('posts.*');
+
+// Assign specific to editor
+$editor->givePermissionTo('posts.view,edit');
+
+// Checking
+$admin->hasPermissionTo('posts.delete');  // true
+$editor->hasPermissionTo('posts.delete'); // false
+```
+
+### Module-Based Permissions
+
+```php
+// Admin module with sub-modules
+$superAdmin->givePermissionTo('admin.*');
+
+// Sub-admin for users only
+$userAdmin->givePermissionTo('admin.users.*');
+
+// Limited admin
+$viewer->givePermissionTo('admin.*.view');
+
+// Checking
+$superAdmin->hasPermissionTo('admin.users.delete');  // true
+$userAdmin->hasPermissionTo('admin.users.delete');   // true
+$userAdmin->hasPermissionTo('admin.settings.view');  // false
+$viewer->hasPermissionTo('admin.users.view');        // true
+$viewer->hasPermissionTo('admin.users.delete');      // false
+```
+
+### Department-Based Access
+
+```php
+// All departments, read-only
+$user->givePermissionTo('*.view');
+
+$user->hasPermissionTo('sales.view');       // true
+$user->hasPermissionTo('marketing.view');   // true
+$user->hasPermissionTo('sales.edit');       // false
+```
+
+## Custom Wildcard Class
+
+You can customize the wildcard behavior by creating your own class:
+
+```php app/Services/CustomWildcardPermission.php
+namespace App\Services;
+
+use Spatie\Permission\WildcardPermission;
+
+class CustomWildcardPermission extends WildcardPermission
+{
+    // Change delimiters
+    public const PART_DELIMITER = ':';
+    public const SUBPART_DELIMITER = '|';
+    
+    // Now use: posts:view|edit instead of posts.view,edit
+}
+```
+
+Register your custom class:
+
+```php config/permission.php
+'enable_wildcard_permission' => true,
+'wildcard_permission' => \App\Services\CustomWildcardPermission::class,
+```
+
+## Blade Directives
+
+Wildcard permissions work seamlessly with Blade directives:
+
+```blade
+@can('posts.*')
+    {{-- User can do anything with posts --}}
+@endcan
+
+@canany(['posts.edit', 'posts.delete'])
+    {{-- User can edit OR delete posts --}}
+@endcanany
+
+@cannot('admin.*')
+    {{-- User is not an admin --}}
+@endcannot
+```
+
+## Middleware
+
+Use wildcards in route middleware:
+
+```php
+Route::group(['middleware' => ['permission:admin.*']], function () {
+    // All admin routes
+});
+
+Route::get('/posts', function () {
+    // ...
+})->middleware('permission:posts.view,edit');
+```
+
+## Performance Considerations
+
+<Warning>
+  Wildcard permissions have performance implications:
+  - Permission checking is slower than exact matches
+  - An index is built and cached for each user/role
+  - The cache is cleared when permissions are modified
+</Warning>
+
+<Tip>
+  Best practices:
+  - Use wildcards strategically, not for every permission
+  - Combine with exact permissions for frequently checked permissions
+  - Monitor performance with many wildcard patterns
+  - Consider caching at the application level for critical paths
+</Tip>
+
+## Validation
+
+The package validates wildcard permission syntax:
+
+```php
+// Valid permissions
+Permission::create(['name' => 'posts.*']);
+Permission::create(['name' => 'posts.view,edit']);
+Permission::create(['name' => 'admin.users.*']);
+
+// Invalid - will throw WildcardPermissionNotProperlyFormatted
+Permission::create(['name' => 'posts.']);      // Empty part after delimiter
+Permission::create(['name' => '.view']);       // Empty part before delimiter
+Permission::create(['name' => 'posts..view']); // Consecutive delimiters
+Permission::create(['name' => 'posts.,edit']); // Empty subpart
+```
+
+## Combining with Roles
+
+Wildcards work with role-based permissions:
+
+```php
+// Create role with wildcard
+$role = Role::create(['name' => 'admin']);
+$role->givePermissionTo('admin.*');
+
+// Assign role to user
+$user->assignRole('admin');
+
+// User inherits wildcard permissions
+$user->hasPermissionTo('admin.users.create'); // true
+```
+
+## Checking Wildcard Permissions Programmatically
+
+The wildcard check is automatic when the feature is enabled:
+
+```php
+use Spatie\Permission\PermissionRegistrar;
+
+// Standard permission check automatically uses wildcards
+$user->hasPermissionTo('posts.delete');
+
+// Get all permissions (including those implied by wildcards)
+$user->getAllPermissions(); // Returns actual granted permissions
+
+// To see if user has wildcard permission directly
+$user->hasDirectPermission('posts.*');
+```

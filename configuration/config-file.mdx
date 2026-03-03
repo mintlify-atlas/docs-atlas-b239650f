@@ -1,0 +1,407 @@
+---
+title: Configuration File
+description: Complete reference for config/permission.php configuration options
+icon: sliders
+---
+
+The `config/permission.php` file contains all configuration options for Laravel Permission. This guide documents every available option with examples and use cases.
+
+## Publishing the Config File
+
+Publish the configuration file using:
+
+```bash
+php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
+```
+
+## Configuration Structure
+
+### Models Configuration
+
+Define which Eloquent models to use for permissions and roles.
+
+<ParamField path="models.permission" type="string" default="Spatie\Permission\Models\Permission::class">
+  The Eloquent model used for permissions. Must implement `Spatie\Permission\Contracts\Permission` contract.
+  
+  **Example:**
+  ```php
+  'permission' => App\Models\Permission::class,
+  ```
+</ParamField>
+
+<ParamField path="models.role" type="string" default="Spatie\Permission\Models\Role::class">
+  The Eloquent model used for roles. Must implement `Spatie\Permission\Contracts\Role` contract.
+  
+  **Example:**
+  ```php
+  'role' => App\Models\Role::class,
+  ```
+</ParamField>
+
+### Table Names Configuration
+
+Customize the database table names used by the package.
+
+<ParamField path="table_names.roles" type="string" default="roles">
+  Table name for storing roles.
+  
+  **Example:**
+  ```php
+  'roles' => 'user_roles',
+  ```
+</ParamField>
+
+<ParamField path="table_names.permissions" type="string" default="permissions">
+  Table name for storing permissions.
+  
+  **Example:**
+  ```php
+  'permissions' => 'app_permissions',
+  ```
+</ParamField>
+
+<ParamField path="table_names.model_has_permissions" type="string" default="model_has_permissions">
+  Pivot table for model-to-permission relationships.
+  
+  **Example:**
+  ```php
+  'model_has_permissions' => 'user_permissions',
+  ```
+</ParamField>
+
+<ParamField path="table_names.model_has_roles" type="string" default="model_has_roles">
+  Pivot table for model-to-role relationships.
+  
+  **Example:**
+  ```php
+  'model_has_roles' => 'user_roles_pivot',
+  ```
+</ParamField>
+
+<ParamField path="table_names.role_has_permissions" type="string" default="role_has_permissions">
+  Pivot table for role-to-permission relationships.
+  
+  **Example:**
+  ```php
+  'role_has_permissions' => 'role_permission_pivot',
+  ```
+</ParamField>
+
+### Column Names Configuration
+
+Customize column names used in pivot tables and relationships.
+
+<ParamField path="column_names.role_pivot_key" type="string|null" default="null">
+  Custom name for the role foreign key in pivot tables. Defaults to `role_id` when null.
+  
+  **Example:**
+  ```php
+  'role_pivot_key' => 'custom_role_id',
+  ```
+</ParamField>
+
+<ParamField path="column_names.permission_pivot_key" type="string|null" default="null">
+  Custom name for the permission foreign key in pivot tables. Defaults to `permission_id` when null.
+  
+  **Example:**
+  ```php
+  'permission_pivot_key' => 'custom_permission_id',
+  ```
+</ParamField>
+
+<ParamField path="column_names.model_morph_key" type="string" default="model_id">
+  The column name for the morph key in polymorphic relationships. Useful when using UUIDs.
+  
+  **Example:**
+  ```php
+  'model_morph_key' => 'model_uuid',
+  ```
+</ParamField>
+
+<ParamField path="column_names.team_foreign_key" type="string" default="team_id">
+  The foreign key column name used for teams feature.
+  
+  **Example:**
+  ```php
+  'team_foreign_key' => 'organization_id',
+  ```
+</ParamField>
+
+### Permission Check Registration
+
+<ParamField path="register_permission_check_method" type="boolean" default="true">
+  When enabled, registers the permission check method on Laravel's Gate. Set to `false` if you want to implement custom permission checking logic.
+  
+  **Example:**
+  ```php
+  'register_permission_check_method' => false,
+  ```
+</ParamField>
+
+### Octane Support
+
+<ParamField path="register_octane_reset_listener" type="boolean" default="false">
+  When enabled, registers a `Laravel\Octane\Events\OperationTerminated` event listener that refreshes permissions on every TickTerminated, TaskTerminated, and RequestTerminated event.
+  
+  <Note>
+  This is typically only needed for specific Octane/Vapor configurations. Most applications should keep this disabled.
+  </Note>
+  
+  **Example:**
+  ```php
+  'register_octane_reset_listener' => true,
+  ```
+</ParamField>
+
+### Events Configuration
+
+<ParamField path="events_enabled" type="boolean" default="false">
+  Enable or disable permission and role assignment/unassignment events.
+  
+  **Available Events:**
+  - `Spatie\Permission\Events\RoleAttachedEvent`
+  - `Spatie\Permission\Events\RoleDetachedEvent`
+  - `Spatie\Permission\Events\PermissionAttachedEvent`
+  - `Spatie\Permission\Events\PermissionDetachedEvent`
+  
+  **Example:**
+  ```php
+  'events_enabled' => true,
+  ```
+  
+  Then create event listeners:
+  ```php
+  use Spatie\Permission\Events\PermissionAttachedEvent;
+  
+  Event::listen(PermissionAttachedEvent::class, function ($event) {
+      Log::info('Permission attached', [
+          'permission' => $event->permission->name,
+          'model' => get_class($event->model),
+      ]);
+  });
+  ```
+</ParamField>
+
+### Teams Feature
+
+<ParamField path="teams" type="boolean" default="false">
+  Enable multi-tenancy support using teams. When enabled, permissions and roles are scoped to teams.
+  
+  <Warning>
+  Enable this BEFORE running migrations, or use the `permission:setup-teams` command to add team support to existing installations.
+  </Warning>
+  
+  **Example:**
+  ```php
+  'teams' => true,
+  ```
+</ParamField>
+
+<ParamField path="team_resolver" type="string" default="Spatie\Permission\DefaultTeamResolver::class">
+  The class responsible for resolving the current team ID. Customize this to implement your own team resolution logic.
+  
+  **Example:**
+  ```php
+  'team_resolver' => App\Services\CustomTeamResolver::class,
+  ```
+  
+  Your custom resolver must implement `Spatie\Permission\Contracts\PermissionsTeamResolver`:
+  ```php
+  namespace App\Services;
+  
+  use Spatie\Permission\Contracts\PermissionsTeamResolver;
+  
+  class CustomTeamResolver implements PermissionsTeamResolver
+  {
+      public function getTeamId(): ?int
+      {
+          return auth()->user()?->current_team_id;
+      }
+  }
+  ```
+</ParamField>
+
+### Passport Integration
+
+<ParamField path="use_passport_client_credentials" type="boolean" default="false">
+  Enable Laravel Passport Client Credentials Grant support for checking permissions.
+  
+  **Example:**
+  ```php
+  'use_passport_client_credentials' => true,
+  ```
+</ParamField>
+
+### Exception Messages
+
+<ParamField path="display_permission_in_exception" type="boolean" default="false">
+  When enabled, permission names are included in authorization exception messages.
+  
+  <Warning>
+  This could be considered an information leak in some security contexts. Enable only if appropriate for your application.
+  </Warning>
+  
+  **Example:**
+  ```php
+  'display_permission_in_exception' => true,
+  ```
+  
+  With this enabled, exceptions will show:
+  ```
+  User does not have the right permissions: [edit-articles, delete-articles]
+  ```
+</ParamField>
+
+<ParamField path="display_role_in_exception" type="boolean" default="false">
+  When enabled, role names are included in authorization exception messages.
+  
+  <Warning>
+  This could be considered an information leak in some security contexts. Enable only if appropriate for your application.
+  </Warning>
+  
+  **Example:**
+  ```php
+  'display_role_in_exception' => true,
+  ```
+  
+  With this enabled, exceptions will show:
+  ```
+  User does not have the right roles: [admin, editor]
+  ```
+</ParamField>
+
+### Wildcard Permissions
+
+<ParamField path="enable_wildcard_permission" type="boolean" default="false">
+  Enable wildcard permission matching. Allows using patterns like `articles.*` to match `articles.create`, `articles.edit`, etc.
+  
+  **Example:**
+  ```php
+  'enable_wildcard_permission' => true,
+  ```
+  
+  **Usage:**
+  ```php
+  $user->givePermissionTo('articles.*');
+  $user->hasPermissionTo('articles.create'); // true
+  $user->hasPermissionTo('articles.edit');   // true
+  $user->hasPermissionTo('articles.delete'); // true
+  ```
+</ParamField>
+
+<ParamField path="wildcard_permission" type="string" default="Spatie\Permission\WildcardPermission::class">
+  The class used for interpreting wildcard permissions. Override to customize wildcard delimiters and matching logic.
+  
+  <Note>
+  This option is commented out by default. Uncomment and set a custom class if needed.
+  </Note>
+  
+  **Example:**
+  ```php
+  'wildcard_permission' => App\Services\CustomWildcardPermission::class,
+  ```
+</ParamField>
+
+### Cache Configuration
+
+<ParamField path="cache.expiration_time" type="DateInterval" default="DateInterval::createFromDateString('24 hours')">
+  How long permissions are cached. The cache is automatically flushed when permissions or roles are updated.
+  
+  **Example:**
+  ```php
+  'expiration_time' => \DateInterval::createFromDateString('1 hour'),
+  ```
+</ParamField>
+
+<ParamField path="cache.key" type="string" default="spatie.permission.cache">
+  The cache key used to store all permissions.
+  
+  **Example:**
+  ```php
+  'key' => 'app.permissions.cache',
+  ```
+</ParamField>
+
+<ParamField path="cache.store" type="string" default="default">
+  The cache driver to use for permission caching. Must match a store configured in `config/cache.php`.
+  
+  **Example:**
+  ```php
+  'store' => 'redis',
+  ```
+</ParamField>
+
+## Complete Configuration Example
+
+Here's a complete example with commonly customized options:
+
+```php config/permission.php
+<?php
+
+return [
+    'models' => [
+        'permission' => App\Models\Permission::class,
+        'role' => App\Models\Role::class,
+    ],
+
+    'table_names' => [
+        'roles' => 'roles',
+        'permissions' => 'permissions',
+        'model_has_permissions' => 'model_has_permissions',
+        'model_has_roles' => 'model_has_roles',
+        'role_has_permissions' => 'role_has_permissions',
+    ],
+
+    'column_names' => [
+        'role_pivot_key' => null,
+        'permission_pivot_key' => null,
+        'model_morph_key' => 'model_id',
+        'team_foreign_key' => 'team_id',
+    ],
+
+    'register_permission_check_method' => true,
+    'register_octane_reset_listener' => false,
+    'events_enabled' => true,
+    
+    'teams' => true,
+    'team_resolver' => \Spatie\Permission\DefaultTeamResolver::class,
+    
+    'use_passport_client_credentials' => false,
+    'display_permission_in_exception' => true,
+    'display_role_in_exception' => true,
+    'enable_wildcard_permission' => true,
+
+    'cache' => [
+        'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+        'key' => 'spatie.permission.cache',
+        'store' => 'default',
+    ],
+];
+```
+
+## Configuration Tips
+
+<Steps>
+  <Step title="Start with defaults">
+    Begin with the default configuration and only customize what you need.
+  </Step>
+  
+  <Step title="Teams setup">
+    If enabling teams, do it before running migrations or use `permission:setup-teams` afterward.
+  </Step>
+  
+  <Step title="Cache configuration">
+    Consider using Redis for the cache store in production environments for better performance.
+  </Step>
+  
+  <Step title="Clear config cache">
+    After modifying the config file, run:
+    ```bash
+    php artisan config:clear
+    ```
+  </Step>
+</Steps>
+
+<Note>
+Most applications work perfectly with the default configuration. Only customize options when you have specific requirements.
+</Note>

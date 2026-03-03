@@ -1,0 +1,471 @@
+---
+title: Role Model
+description: Complete API reference for the Role model
+---
+
+The `Role` model represents a role in the system. It extends Laravel's Eloquent Model and implements the `Spatie\Permission\Contracts\Role` interface.
+
+## Properties
+
+<ResponseField name="id" type="int|string">
+  The primary key of the role
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the role
+</ResponseField>
+
+<ResponseField name="guard_name" type="string">
+  The guard name associated with this role
+</ResponseField>
+
+<ResponseField name="created_at" type="?\Illuminate\Support\Carbon">
+  Timestamp when the role was created
+</ResponseField>
+
+<ResponseField name="updated_at" type="?\Illuminate\Support\Carbon">
+  Timestamp when the role was last updated
+</ResponseField>
+
+## Relationships
+
+<ResponseField name="permissions" type="\Illuminate\Database\Eloquent\Collection">
+  Collection of permissions assigned to this role
+</ResponseField>
+
+<ResponseField name="users" type="\Illuminate\Database\Eloquent\Collection">
+  Collection of users who have this role
+</ResponseField>
+
+## Static Methods
+
+### create
+
+Create a new role.
+
+<ParamField path="attributes" type="array" default="[]">
+  An array of attributes for the role. Must include `name`. If `guard_name` is not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Role">
+  The newly created role instance
+</ResponseField>
+
+```php
+$role = Role::create([
+    'name' => 'writer',
+    'guard_name' => 'web'
+]);
+```
+
+<Note>
+Throws `RoleAlreadyExists` if a role with the same name and guard already exists.
+</Note>
+
+### findByName
+
+Find a role by its name and optionally guard name.
+
+<ParamField path="name" type="string" required>
+  The name of the role to find
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Role">
+  The role instance
+</ResponseField>
+
+```php
+$role = Role::findByName('writer');
+$role = Role::findByName('writer', 'api');
+```
+
+<Note>
+Throws `RoleDoesNotExist` if the role is not found.
+</Note>
+
+### findById
+
+Find a role by its ID and optionally guard name.
+
+<ParamField path="id" type="int|string" required>
+  The ID of the role to find
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Role">
+  The role instance
+</ResponseField>
+
+```php
+$role = Role::findById(1);
+$role = Role::findById(1, 'api');
+```
+
+<Note>
+Throws `RoleDoesNotExist` if the role is not found.
+</Note>
+
+### findOrCreate
+
+Find an existing role or create a new one.
+
+<ParamField path="name" type="string" required>
+  The name of the role
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Role">
+  The found or newly created role instance
+</ResponseField>
+
+```php
+$role = Role::findOrCreate('writer');
+$role = Role::findOrCreate('writer', 'api');
+```
+
+## Instance Methods
+
+### permissions
+
+Get all permissions assigned to this role.
+
+<ResponseField name="return" type="\Illuminate\Database\Eloquent\Relations\BelongsToMany">
+  A BelongsToMany relationship to the Permission model
+</ResponseField>
+
+```php
+$permissions = $role->permissions;
+$permissionCount = $role->permissions()->count();
+```
+
+### users
+
+Get all users who have this role.
+
+<ResponseField name="return" type="\Illuminate\Database\Eloquent\Relations\BelongsToMany">
+  A BelongsToMany relationship to the User model
+</ResponseField>
+
+```php
+$users = $role->users;
+$userCount = $role->users()->count();
+```
+
+### hasPermissionTo
+
+Determine if the role has the given permission.
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check (can be permission name, ID, model instance, or enum)
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the role's guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has the permission
+</ResponseField>
+
+```php
+if ($role->hasPermissionTo('edit articles')) {
+    // Role has the permission
+}
+
+if ($role->hasPermissionTo(1)) {
+    // Check by permission ID
+}
+```
+
+<Note>
+Throws `PermissionDoesNotExist` if the permission doesn't exist or `GuardDoesNotMatch` if guards don't match.
+</Note>
+
+## Methods from HasPermissions Trait
+
+### givePermissionTo
+
+Grant one or more permissions to this role.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to grant (can be permission name, ID, model instance, or array/collection of these)
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The role instance for method chaining
+</ResponseField>
+
+```php
+$role->givePermissionTo('edit articles');
+$role->givePermissionTo(['edit articles', 'delete articles']);
+$role->givePermissionTo(1, 2, 3);
+```
+
+### syncPermissions
+
+Remove all current permissions and assign the given ones.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to sync
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The role instance for method chaining
+</ResponseField>
+
+```php
+$role->syncPermissions(['edit articles', 'delete articles']);
+$role->syncPermissions('edit articles');
+```
+
+### revokePermissionTo
+
+Revoke one or more permissions from this role.
+
+<ParamField path="permission" type="Permission|Permission[]|string|string[]|BackedEnum" required>
+  One or more permissions to revoke
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The role instance for method chaining
+</ResponseField>
+
+```php
+$role->revokePermissionTo('edit articles');
+$role->revokePermissionTo(['edit articles', 'delete articles']);
+```
+
+### checkPermissionTo
+
+Check if the role has the given permission without throwing exceptions.
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has the permission, false otherwise
+</ResponseField>
+
+```php
+if ($role->checkPermissionTo('edit articles')) {
+    // Role has the permission
+}
+```
+
+### hasAnyPermission
+
+Check if the role has any of the given permissions.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has at least one of the permissions
+</ResponseField>
+
+```php
+if ($role->hasAnyPermission(['edit articles', 'delete articles'])) {
+    // Role has at least one of these permissions
+}
+
+if ($role->hasAnyPermission('edit articles', 'delete articles', 'publish articles')) {
+    // Can also pass multiple arguments
+}
+```
+
+### hasAllPermissions
+
+Check if the role has all of the given permissions.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has all of the permissions
+</ResponseField>
+
+```php
+if ($role->hasAllPermissions(['edit articles', 'delete articles'])) {
+    // Role has both permissions
+}
+
+if ($role->hasAllPermissions('edit articles', 'delete articles', 'publish articles')) {
+    // Can also pass multiple arguments
+}
+```
+
+### hasDirectPermission
+
+Check if the role has the given permission directly assigned.
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has the permission directly
+</ResponseField>
+
+```php
+if ($role->hasDirectPermission('edit articles')) {
+    // Role has this permission directly assigned
+}
+```
+
+### hasAllDirectPermissions
+
+Check if the role has all of the given permissions directly assigned.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has all permissions directly
+</ResponseField>
+
+```php
+if ($role->hasAllDirectPermissions(['edit articles', 'delete articles'])) {
+    // Role has both permissions directly assigned
+}
+```
+
+### hasAnyDirectPermission
+
+Check if the role has any of the given permissions directly assigned.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the role has any permission directly
+</ResponseField>
+
+```php
+if ($role->hasAnyDirectPermission(['edit articles', 'delete articles'])) {
+    // Role has at least one of these permissions directly
+}
+```
+
+### getAllPermissions
+
+Get all permissions assigned to this role.
+
+<ResponseField name="return" type="\Illuminate\Support\Collection">
+  Collection of all permissions
+</ResponseField>
+
+```php
+$permissions = $role->getAllPermissions();
+```
+
+### getPermissionNames
+
+Get the names of all permissions assigned to this role.
+
+<ResponseField name="return" type="\Illuminate\Support\Collection">
+  Collection of permission names
+</ResponseField>
+
+```php
+$permissionNames = $role->getPermissionNames();
+// ['edit articles', 'delete articles']
+```
+
+### forgetCachedPermissions
+
+Clear the permission cache.
+
+```php
+$role->forgetCachedPermissions();
+```
+
+## Query Scopes
+
+### permission
+
+Scope the query to roles that have certain permissions.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to filter by
+</ParamField>
+
+```php
+$roles = Role::permission('edit articles')->get();
+$roles = Role::permission(['edit articles', 'delete articles'])->get();
+```
+
+### withoutPermission
+
+Scope the query to roles that don't have certain permissions.
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  One or more permissions to exclude
+</ParamField>
+
+```php
+$roles = Role::withoutPermission('delete articles')->get();
+```
+
+## Team Support
+
+When team support is enabled in the configuration, roles are automatically scoped to the current team. The package handles team filtering automatically in all queries and relationships.
+
+```php
+// With teams enabled, roles are automatically scoped
+$role = Role::create([
+    'name' => 'writer',
+    'team_id' => 1
+]);
+```
+
+## Configuration
+
+The Role model uses the following configuration options:
+
+- `permission.table_names.roles` - The database table name (default: `roles`)
+- `permission.models.permission` - The Permission model class to use for relationships
+- `permission.table_names.role_has_permissions` - The pivot table for role-permission relationships
+- `permission.table_names.model_has_roles` - The pivot table for user-role relationships
+- `permission.teams` - Enable team support
+- `permission.teams_key` - The foreign key column for team relationships
+
+## Events
+
+The following events are fired when permissions are attached/detached:
+
+- `Spatie\Permission\Events\PermissionAttachedEvent` - Fired when a permission is granted
+- `Spatie\Permission\Events\PermissionDetachedEvent` - Fired when a permission is revoked
+
+## Wildcard Permissions
+
+When wildcard permissions are enabled in the configuration, the `hasPermissionTo` method supports wildcard pattern matching:
+
+```php
+// If role has 'articles.*' permission
+if ($role->hasPermissionTo('articles.edit')) {
+    // This will return true due to wildcard matching
+}
+```
+
+<Note>
+Wildcard permissions must be enabled in the configuration file.
+</Note>

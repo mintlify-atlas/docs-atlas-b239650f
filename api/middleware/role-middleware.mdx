@@ -1,0 +1,206 @@
+---
+title: RoleMiddleware
+description: Middleware to protect routes requiring specific roles
+---
+
+## Overview
+
+The `RoleMiddleware` class restricts access to routes based on user roles. It checks if the authenticated user has at least one of the specified roles before allowing the request to proceed.
+
+**Namespace:** `Spatie\Permission\Middleware\RoleMiddleware`
+
+## Registration
+
+Register the middleware in your `bootstrap/app.php` file:
+
+```php
+use Spatie\Permission\Middleware\RoleMiddleware;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'role' => RoleMiddleware::class,
+    ]);
+})
+```
+
+## Methods
+
+### handle()
+
+Handles the incoming request and verifies the user has the required role(s).
+
+```php
+public function handle(
+    Request $request, 
+    Closure $next, 
+    $role, 
+    ?string $guard = null
+)
+```
+
+**Parameters:**
+- `$request` - The incoming HTTP request
+- `$next` - The next middleware closure
+- `$role` - Role name(s) as string or pipe-separated values
+- `$guard` - Optional authentication guard name
+
+**Behavior:**
+1. Retrieves the authenticated user from the specified guard
+2. Supports Passport client credentials for machine-to-machine authentication
+3. Verifies the user has the `HasRoles` trait
+4. Checks if the user has any of the specified roles (using pipe `|` as separator)
+5. Throws `UnauthorizedException` if user is not logged in, missing the trait, or lacks required roles
+
+**Exceptions:**
+- `UnauthorizedException::notLoggedIn()` - User is not authenticated
+- `UnauthorizedException::missingTraitHasRoles($user)` - User model lacks `HasRoles` trait
+- `UnauthorizedException::forRoles($roles)` - User lacks any of the required roles
+
+### using()
+
+Helper method to programmatically specify roles and guard for the middleware.
+
+```php
+public static function using(
+    array|string|BackedEnum $role, 
+    ?string $guard = null
+): string
+```
+
+**Parameters:**
+- `$role` - Role name(s) as string, array, or BackedEnum
+- `$guard` - Optional authentication guard name
+
+**Returns:** String representing the middleware with parameters
+
+**Example:**
+```php
+RoleMiddleware::using('admin')
+RoleMiddleware::using(['admin', 'editor'])
+RoleMiddleware::using('admin', 'api')
+```
+
+## Usage Examples
+
+### Single Role
+
+Protect a route requiring a single role:
+
+```php
+Route::get('/admin/dashboard', function () {
+    return 'Admin Dashboard';
+})->middleware('role:admin');
+```
+
+### Multiple Roles (OR)
+
+Allow access if user has ANY of the specified roles:
+
+```php
+Route::get('/content/edit', function () {
+    return 'Edit Content';
+})->middleware('role:admin|editor|writer');
+```
+
+### With Custom Guard
+
+Specify a custom authentication guard:
+
+```php
+Route::get('/api/admin', function () {
+    return 'API Admin';
+})->middleware('role:admin,api');
+```
+
+### Using the using() Method
+
+Programmatically specify roles:
+
+```php
+use Spatie\Permission\Middleware\RoleMiddleware;
+
+Route::get('/dashboard', function () {
+    return 'Dashboard';
+})->middleware(RoleMiddleware::using('admin'));
+
+// Multiple roles
+Route::get('/content', function () {
+    return 'Content';
+})->middleware(RoleMiddleware::using(['admin', 'editor']));
+
+// With guard
+Route::get('/api/content', function () {
+    return 'API Content';
+})->middleware(RoleMiddleware::using('admin', 'api'));
+```
+
+### Route Groups
+
+Apply to multiple routes:
+
+```php
+Route::middleware(['role:admin'])->group(function () {
+    Route::get('/admin/users', [UserController::class, 'index']);
+    Route::get('/admin/settings', [SettingsController::class, 'index']);
+});
+```
+
+### With BackedEnum
+
+Use PHP enums for type-safe role definitions:
+
+```php
+enum UserRole: string
+{
+    case ADMIN = 'admin';
+    case EDITOR = 'editor';
+    case VIEWER = 'viewer';
+}
+
+Route::get('/admin', function () {
+    return 'Admin Area';
+})->middleware(RoleMiddleware::using(UserRole::ADMIN));
+
+// Multiple enum roles
+Route::get('/content', function () {
+    return 'Content Area';
+})->middleware(RoleMiddleware::using([UserRole::ADMIN, UserRole::EDITOR]));
+```
+
+### Controller Usage
+
+Apply in controller constructors:
+
+```php
+class AdminController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('role:admin');
+    }
+    
+    // Or specific methods
+    public function __construct()
+    {
+        $this->middleware('role:admin')->only(['destroy', 'edit']);
+        $this->middleware('role:admin|editor')->only(['index', 'show']);
+    }
+}
+```
+
+## Passport Client Credentials
+
+The middleware supports Laravel Passport machine-to-machine authentication. When `permission.use_passport_client_credentials` is enabled in config, the middleware will authenticate Passport clients using bearer tokens.
+
+```php
+// config/permission.php
+'use_passport_client_credentials' => true,
+```
+
+## Notes
+
+- The pipe character (`|`) is used to separate multiple roles, implementing OR logic
+- User must have at least ONE of the specified roles to pass
+- The middleware requires the user model to use the `HasRoles` trait
+- For AND logic (requiring ALL roles), chain multiple middleware calls
+- Roles are checked using the `hasAnyRole()` method on the user model

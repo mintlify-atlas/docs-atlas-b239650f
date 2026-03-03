@@ -1,0 +1,247 @@
+---
+title: Security Best Practices
+description: Essential security practices for implementing permissions and roles in your Laravel application
+---
+
+## Guard Separation
+
+Always use separate guards for different user types to maintain proper authorization boundaries.
+
+```php
+// ✅ Good: Separate permissions per guard
+$webPermission = Permission::create(['name' => 'edit-articles', 'guard_name' => 'web']);
+$adminPermission = Permission::create(['name' => 'edit-articles', 'guard_name' => 'admin']);
+
+$user->givePermissionTo($webPermission);
+$admin->givePermissionTo($adminPermission);
+```
+
+```php
+// ❌ Bad: Mixing guards without explicit checks
+$user->givePermissionTo($adminPermission); // Throws GuardDoesNotMatch
+```
+
+<Warning>
+Attempting to assign a permission from a different guard will throw a `GuardDoesNotMatch` exception. Always verify guard names match before assignment.
+</Warning>
+
+## Exception Message Configuration
+
+By default, permission and role names are not included in exception messages to prevent information leakage.
+
+```php config/permission.php
+return [
+    /*
+     * When set to true, the required permission names are added to exception messages.
+     * This could be considered an information leak in some contexts, so the default
+     * setting is false here for optimum safety.
+     */
+    'display_permission_in_exception' => false,
+
+    /*
+     * When set to true, the required role names are added to exception messages.
+     * This could be considered an information leak in some contexts, so the default
+     * setting is false here for optimum safety.
+     */
+    'display_role_in_exception' => false,
+];
+```
+
+<Tip>
+Only enable `display_permission_in_exception` and `display_role_in_exception` in development or when you have proper error handling that logs these details without exposing them to end users.
+</Tip>
+
+## Gate Before Callbacks for Super Admin
+
+Implement super-admin checks using Laravel's Gate `before` callback to bypass permission checks safely.
+
+```php app/Providers/AuthServiceProvider.php
+use Illuminate\Support\Facades\Gate;
+
+public function boot(): void
+{
+    Gate::before(function ($user, $ability) {
+        // Super admin bypasses all permission checks
+        return $user->hasRole('super-admin') ? true : null;
+    });
+}
+```
+
+<Warning>
+**Critical**: Always return `null` (not `false`) when the super-admin check doesn't apply. Returning `false` will deny access even if the user has the permission through other means.
+</Warning>
+
+## Middleware Guard Specification
+
+Always specify the guard when using permission middleware for non-default authentication guards.
+
+```php routes/web.php
+Route::group(['middleware' => ['auth:admin', 'permission:admin-permission,admin']], function () {
+    // Routes requiring admin guard
+});
+
+// Using static using() method for clarity
+Route::get('/admin/users', [UserController::class, 'index'])
+    ->middleware(PermissionMiddleware::using('manage-users', 'admin'));
+```
+
+<Accordion title="Handling Multiple Guards in Middleware">
+When checking permissions, the middleware will use the guard of the authenticated user:
+
+```php
+// User authenticated with 'admin' guard
+// Cannot access permission from 'web' guard
+Auth::guard('admin')->login($admin);
+$admin->givePermissionTo('admin-permission'); // guard_name: 'admin'
+
+// This works
+Route::middleware('permission:admin-permission,admin');
+
+// This fails - wrong guard
+Route::middleware('permission:admin-permission,web'); // 403 Forbidden
+```
+</Accordion>
+
+## Wildcard Permissions Security
+
+Wildcard permissions are disabled by default. Enable only when you understand the security implications.
+
+```php config/permission.php
+return [
+    /*
+     * By default wildcard permission lookups are disabled.
+     * See documentation to understand supported syntax.
+     */
+    'enable_wildcard_permission' => false,
+];
+```
+
+<Warning>
+Wildcard permissions like `articles.*` grant broad access. Use with caution:
+- ✅ Good: `articles.published.*` (specific scope)
+- ⚠️ Risky: `admin.*` (too broad)
+- ❌ Dangerous: `*` (unrestricted access)
+</Warning>
+
+## Passport Client Credentials
+
+For machine-to-machine authentication, configure Passport client credentials support carefully.
+
+```php config/permission.php
+return [
+    /*
+     * Passport Client Credentials Grant
+     * When set to true the package will use Passports Client to check permissions
+     */
+    'use_passport_client_credentials' => false,
+];
+```
+
+```php
+// Middleware checks for Passport clients
+if (!$user && $request->bearerToken() && config('permission.use_passport_client_credentials')) {
+    $user = Guard::getPassportClient($guard);
+}
+```
+
+<Tip>
+Passport clients can have permissions just like users. Use this for API integrations and service accounts:
+
+```php
+$client = new Client(['name' => 'Integration Service']);
+$client->save();
+$client->givePermissionTo('api-access');
+```
+</Tip>
+
+## Soft Delete Handling
+
+Permissions are preserved when users are soft-deleted, but detached on permanent deletion.
+
+```php
+// Soft delete preserves permissions
+$user->delete(); // isForceDeleting() = false
+
+// User still has permissions
+$user = User::withTrashed()->find($userId);
+$user->hasPermissionTo('edit-articles'); // true
+
+// Force delete removes permissions
+$user->forceDelete(); // Permissions are detached
+```
+
+<Note>
+This behavior is implemented in the `bootHasPermissions()` method and automatically handles cleanup:
+
+```php
+static::deleting(function ($model) {
+    if (method_exists($model, 'isForceDeleting') && !$model->isForceDeleting()) {
+        return; // Skip if soft deleting
+    }
+    $model->permissions()->detach(); // Only detach on force delete
+});
+```
+</Note>
+
+## Database Column Configuration
+
+Customize column names for UUID or ULID primary keys to maintain security best practices.
+
+```php config/permission.php
+return [
+    'column_names' => [
+        /*
+         * Change this if you want to name the related model primary key other than
+         * `model_id`.
+         *
+         * For example, this would be nice if your primary keys are all UUIDs. In
+         * that case, name this `model_uuid`.
+         */
+        'model_morph_key' => 'model_id',
+        
+        'role_pivot_key' => null, // default 'role_id'
+        'permission_pivot_key' => null, // default 'permission_id'
+    ],
+];
+```
+
+<Tip>
+UUIDs provide security benefits by preventing enumeration attacks:
+
+```php
+'column_names' => [
+    'model_morph_key' => 'model_uuid',
+],
+```
+</Tip>
+
+## Event Security
+
+Permission events are disabled by default. Enable only when you have proper monitoring in place.
+
+```php config/permission.php
+return [
+    /*
+     * Events will fire when a role or permission is assigned/unassigned
+     * To enable, set to true, and then create listeners to watch these events.
+     */
+    'events_enabled' => false,
+];
+```
+
+```php
+// When enabled, listen for security-relevant events
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+
+Event::listen(PermissionAttachedEvent::class, function ($event) {
+    Log::info('Permission attached', [
+        'user_id' => $event->model->id,
+        'permissions' => $event->permissionsOrIds,
+    ]);
+});
+```
+
+<Warning>
+Log permission changes for security auditing, but ensure logs are stored securely and comply with privacy regulations.
+</Warning>

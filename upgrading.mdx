@@ -1,0 +1,394 @@
+---
+title: Upgrading
+description: Guide to upgrading between major versions of Laravel Permission
+icon: "arrow-up"
+---
+
+## Upgrade Essentials
+
+All upgrades of this package should follow these steps:
+
+<Steps>
+
+<Step title="Update Composer">
+Update your `composer.json` to specify the new major version:
+
+```json
+"spatie/laravel-permission": "^7.0"
+```
+
+Then run:
+```bash
+composer update spatie/laravel-permission
+```
+</Step>
+
+<Step title="Update Migrations">
+Compare the migration file stubs in the new version against migrations you've already run. If necessary, create a new migration by hand to apply database changes.
+</Step>
+
+<Step title="Update Config File">
+Incorporate any changes to the `permission.php` config file:
+
+1. Backup your existing config
+2. Re-publish from the package
+3. Re-apply your customizations
+
+```bash
+php artisan vendor:publish --tag=permission-config --force
+```
+</Step>
+
+<Step title="Update Custom Models">
+If you've extended package models into your app, compare old and new models and apply relevant updates.
+</Step>
+
+<Step title="Update Custom Methods">
+If you've overridden any methods from package traits, compare old and new traits and apply updates.
+</Step>
+
+<Step title="Check Contracts">
+If you've implemented package contracts in any models, verify method signatures match.
+</Step>
+
+<Step title="Review Changelog">
+Review the [Changelog](https://github.com/spatie/laravel-permission/blob/main/CHANGELOG.md) for all changes.
+</Step>
+
+</Steps>
+
+## Upgrading from v6 to v7
+
+<Note>
+Version 7 modernizes the codebase while keeping the upgrade path relatively easy. Most changes are internal improvements.
+</Note>
+
+### Requirements
+
+- **PHP**: 8.4 or higher
+- **Laravel**: 12 or higher
+- **Test Suite**: Now uses Pest 3.0
+
+### Breaking Changes
+
+<Accordion title="Event Class Renames">
+
+All event classes now have an `Event` suffix for better clarity:
+
+| v6 Class | v7 Class |
+|----------|----------|
+| `PermissionAttached` | `PermissionAttachedEvent` |
+| `PermissionDetached` | `PermissionDetachedEvent` |
+| `RoleAttached` | `RoleAttachedEvent` |
+| `RoleDetached` | `RoleDetachedEvent` |
+
+**Action Required**: Update your event listeners:
+
+```php
+// Before
+Event::listen(PermissionAttached::class, function ($event) {
+    // ...
+});
+
+// After
+Event::listen(PermissionAttachedEvent::class, function ($event) {
+    // ...
+});
+```
+
+</Accordion>
+
+<Accordion title="Command Class Renames">
+
+All command classes now have a `Command` suffix:
+
+| v6 Class | v7 Class |
+|----------|----------|
+| `CacheReset` | `CacheResetCommand` |
+| `CreateRole` | `CreateRoleCommand` |
+| `CreatePermission` | `CreatePermissionCommand` |
+| `Show` | `ShowCommand` |
+| `UpgradeForTeams` | `UpgradeForTeamsCommand` |
+| `AssignRole` | `AssignRoleCommand` |
+
+<Note>
+The artisan command signatures remain unchanged, so your scripts and code that call them via artisan continue to work.
+</Note>
+
+</Accordion>
+
+<Accordion title="Service Provider Changes">
+
+The service provider now extends `PackageServiceProvider` from `spatie/laravel-package-tools`.
+
+**Lumen Support Removed**: Version 7 no longer supports Lumen. Continue using v6 if you need Lumen.
+
+</Accordion>
+
+<Accordion title="Removed Deprecated Methods">
+
+- `PermissionRegistrar::clearClassPermissions()` has been removed
+- Use `clearPermissionsCollection()` instead
+
+```php
+// Before (deprecated in v6, removed in v7)
+$registrar->clearClassPermissions();
+
+// After
+$registrar->clearPermissionsCollection();
+```
+
+</Accordion>
+
+<Accordion title="Type Hints Added">
+
+Return types and parameter types have been added throughout. If you've extended classes or traits, update your method signatures:
+
+**HasPermissions trait:**
+```php
+public function givePermissionTo(...$permissions): static
+public function syncPermissions(...$permissions): static
+public function revokePermissionTo(...$permissions): static
+```
+
+**HasRoles trait:**
+```php
+public function assignRole(...$roles): static
+public function removeRole(...$roles): static
+public function syncRoles(...$roles): static
+```
+
+**PermissionRegistrar:**
+```php
+public function setPermissionClass(string $class): static
+public function setRoleClass(string $class): static
+public function forgetCachedPermissions(): bool
+```
+
+</Accordion>
+
+<Accordion title="Wildcard Contract Changes">
+
+The `__construct(Model $record)` method has been removed from the `Spatie\Permission\Contracts\Wildcard` interface.
+
+If you implement this contract, remove the constructor from interface requirements (your concrete class should still accept a Model in its constructor).
+
+</Accordion>
+
+### Code Modernization
+
+v7 includes internal code modernization that shouldn't affect most users:
+
+- Constructor promotion in `WildcardPermission`
+- Modern PHP syntax throughout (`instanceof`, `::class`, `str_contains`)
+- Improved type safety
+- Better use of imports
+
+## Upgrading from v5 to v6
+
+<Warning>
+Version 6 has a few important breaking changes, particularly around ID handling for UUID/ULID support.
+</Warning>
+
+### Breaking Changes
+
+<Accordion title="ID Parameter Type Changes">
+
+Due to improved UUID/ULID/GUID support, methods accepting Permission or Role `id` must receive integers, not numeric strings.
+
+**The Problem:**
+```php
+// This will fail - '123' is treated as a permission NAME
+$user->givePermissionTo('123');
+```
+
+**The Solution:**
+Convert string IDs to integers, especially when receiving from HTML forms:
+
+```php
+// Convert array of permission IDs from strings to integers
+$permissionIds = collect($validated['permission'])
+    ->map(fn($val) => (int)$val);
+
+$role->syncPermissions($permissionIds);
+```
+
+<Note>
+This primarily affects UI pages where HTML form data is received as strings.
+</Note>
+
+</Accordion>
+
+<Accordion title="Model Method Changes">
+
+If you've overridden `getPermissionClass()` or `getRoleClass()` methods:
+
+- These methods now return strings, not instances
+- Use `::` syntax instead of `->` when accessing the model
+
+```php
+// Before
+$this->getPermissionClass()->where(...)
+
+// After  
+$this->permissionClass::where(...)
+```
+
+</Accordion>
+
+<Accordion title="Migration Updates Required">
+
+Migrations have been updated to Laravel 8+ anonymous class syntax.
+
+**If you see this error:**
+```
+Error: Access to undeclared static property Spatie\Permission\PermissionRegistrar::$pivotPermission
+```
+
+Your migration file needs upgrading:
+
+<Steps>
+
+<Step title="Backup your migration">
+```bash
+cp database/migrations/*_create_permission_tables.php backup/
+```
+</Step>
+
+<Step title="Re-publish the migration">
+```bash
+php artisan vendor:publish --tag=permission-migrations --force
+```
+</Step>
+
+<Step title="Re-apply customizations">
+If you had UUID support or other customizations, re-apply them to the new migration.
+</Step>
+
+</Steps>
+
+</Accordion>
+
+<Accordion title="Middleware Namespace Change">
+
+The middleware namespace changed from plural to singular:
+
+```php
+// Before
+\Spatie\Permission\Middlewares\RoleMiddleware::class
+
+// After
+\Spatie\Permission\Middleware\RoleMiddleware::class
+```
+
+**Update in app/Http/Kernel.php (Laravel 10 and below):**
+```php
+protected $middlewareAliases = [
+    'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+    'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+    'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+];
+```
+
+</Accordion>
+
+<Accordion title="RoleOrPermissionMiddleware Behavior Change">
+
+The `RoleOrPermissionMiddleware` now uses `canAny()` for checking abilities, which includes all abilities registered by your application (not just this package's permissions).
+
+This may grant access to abilities like "Super Admin" that previously would have failed.
+
+</Accordion>
+
+<Accordion title="Test Suite Changes">
+
+If your tests manually register permissions, **remove** calls to `registerPermissions()`:
+
+```php
+// DELETE this from your tests
+app()[\Spatie\Permission\PermissionRegistrar::class]->registerPermissions();
+
+// Keep cache clearing (still needed)
+app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+```
+
+</Accordion>
+
+### New Features in v6
+
+- Full UUID/ULID/GUID support
+- `@haspermission` Blade directive
+- `withoutRole` and `withoutPermission` query scopes
+- Guard name included in exceptions
+- BackedEnum support for roles and permissions
+- Improved Laravel Octane support
+- Performance improvements for wildcard permissions
+
+## Upgrading from v4 to v5
+
+Follow the "Upgrade Essentials" steps at the top of this page.
+
+No major breaking changes between v4 and v5.
+
+## Upgrading from v3 to v4
+
+### Breaking Changes
+
+- **Laravel 5.8 support dropped** - Requires Laravel 6.0+
+- **PHP 7.2.5+ required** (was 7.1)
+- Unique constraints now enforced at database level
+- Changed `PermissionRegistrar::initializeCache()` from private to public
+- Collections changed from `Support\Collection` to `Eloquent\Collection`
+
+### Database Changes
+
+Unique constraints are now enforced at the database level. Create a migration to add these constraints:
+
+```php
+Schema::table('permissions', function (Blueprint $table) {
+    $table->unique(['name', 'guard_name']);
+});
+
+Schema::table('roles', function (Blueprint $table) {
+    $table->unique(['name', 'guard_name']);
+});
+```
+
+## Upgrading from v2 to v3
+
+- **PHP 7.2+ required**
+- **Laravel 5.8+ required**
+- No other breaking changes
+
+## Upgrading from v1 to v2
+
+<Warning>
+Upgrading from v1 to v2 requires significant database and code changes. There is no automatic migration.
+</Warning>
+
+V2 introduced a complete restructure of the database schema and code architecture.
+
+### Manual Migration Required
+
+You'll need to:
+
+1. Manually migrate your data to the new structure
+2. Update all code to use new methods
+3. Remove old `laravel-permission.php` config
+4. Publish and configure new `permission.php` config
+
+**Migration Helper:**
+[@fabricecw's migration gist](https://gist.github.com/fabricecw/58ee93dd4f99e78724d8acbb851658a4) may help with data migration.
+
+## Getting Help
+
+If you encounter issues during upgrade:
+
+1. Review the complete [Changelog](https://github.com/spatie/laravel-permission/blob/main/CHANGELOG.md)
+2. Check [GitHub Issues](https://github.com/spatie/laravel-permission/issues)
+3. Consult the [Release Notes](https://github.com/spatie/laravel-permission/releases)
+4. See the [Troubleshooting](/troubleshooting) guide
+
+<Note>
+Always test upgrades in a development environment before deploying to production.
+</Note>

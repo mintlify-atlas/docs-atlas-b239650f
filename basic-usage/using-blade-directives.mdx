@@ -1,0 +1,446 @@
+---
+title: 'Using Blade Directives'
+description: 'Learn how to use permission and role directives in Blade templates'
+---
+
+Laravel Permission provides custom Blade directives that make it easy to show or hide content based on user permissions and roles. These directives are cleaner and more readable than using `@if` statements with method calls.
+
+## Permission Directives
+
+Check user permissions directly in your Blade templates.
+
+### @haspermission
+
+Show content only if the user has a specific permission:
+
+```blade
+@haspermission('edit articles')
+    <a href="{{ route('articles.edit', $article) }}" class="btn btn-primary">
+        Edit Article
+    </a>
+@endhaspermission
+```
+
+<Tabs>
+  <Tab title="Basic Usage">
+    ```blade
+    @haspermission('delete articles')
+        <form action="{{ route('articles.destroy', $article) }}" method="POST">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+    @endhaspermission
+    ```
+  </Tab>
+
+  <Tab title="With Else">
+    ```blade
+    @haspermission('edit articles')
+        <a href="{{ route('articles.edit', $article) }}">Edit</a>
+    @else
+        <span class="text-muted">View Only</span>
+    @endhaspermission
+    ```
+  </Tab>
+
+  <Tab title="Specific Guard">
+    ```blade
+    @haspermission('edit articles', 'api')
+        <button>Edit via API</button>
+    @endhaspermission
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  **Behind the scenes**: The `@haspermission` directive calls `auth()->user()->checkPermissionTo($permission)`, which returns `false` gracefully if the permission doesn't exist.
+</Note>
+
+## Role Directives
+
+Show or hide content based on user roles.
+
+### @role
+
+Show content only if the user has a specific role:
+
+```blade
+@role('admin')
+    <a href="{{ route('admin.dashboard') }}" class="nav-link">
+        Admin Dashboard
+    </a>
+@endrole
+```
+
+<Tabs>
+  <Tab title="Single Role">
+    ```blade
+    @role('writer')
+        <div class="alert alert-info">
+            Welcome, Writer! You can create and edit articles.
+        </div>
+    @endrole
+    ```
+  </Tab>
+
+  <Tab title="With Else">
+    ```blade
+    @role('admin')
+        <button class="btn btn-danger">Delete User</button>
+    @else
+        <button class="btn btn-secondary" disabled>No Permission</button>
+    @endrole
+    ```
+  </Tab>
+
+  <Tab title="Specific Guard">
+    ```blade
+    @role('admin', 'api')
+        <span class="badge badge-success">API Admin</span>
+    @endrole
+    ```
+  </Tab>
+</Tabs>
+
+### @hasrole
+
+Alias to `@role` - works identically:
+
+```blade
+@hasrole('editor')
+    <a href="{{ route('articles.pending') }}">
+        Pending Articles ({{ $pendingCount }})
+    </a>
+@endhasrole
+```
+
+<Note>
+  `@hasrole` and `@role` are functionally identical. Use whichever reads better in your templates.
+</Note>
+
+### @hasanyrole
+
+Show content if user has any of the specified roles:
+
+```blade
+@hasanyrole('writer|editor|admin')
+    <div class="content-management-panel">
+        <h3>Content Management</h3>
+        <!-- Content management tools -->
+    </div>
+@endhasanyrole
+```
+
+<Tabs>
+  <Tab title="Pipe Separator">
+    ```blade
+    @hasanyrole('writer|editor')
+        <a href="{{ route('articles.create') }}">Create Article</a>
+    @endhasanyrole
+    ```
+  </Tab>
+
+  <Tab title="With Else">
+    ```blade
+    @hasanyrole('admin|super-admin')
+        <button class="btn btn-danger">Delete</button>
+    @else
+        <span class="text-muted">Admin only</span>
+    @endhasanyrole
+    ```
+  </Tab>
+</Tabs>
+
+### @hasallroles
+
+Show content only if user has all specified roles:
+
+```blade
+@hasallroles('writer|reviewer')
+    <div class="alert alert-success">
+        You can write and review articles!
+    </div>
+@endhasallroles
+```
+
+<Warning>
+  User must have ALL roles listed. If they're missing even one, the content won't show.
+</Warning>
+
+### @hasexactroles
+
+Show content only if user has exactly these roles (no more, no less):
+
+```blade
+@hasexactroles('writer|editor')
+    <p>You have exactly the Writer and Editor roles.</p>
+@endhasexactroles
+```
+
+<Note>
+  This directive checks that the user has precisely these roles and no others.
+</Note>
+
+## Using Laravel's Native @can Directive
+
+Laravel Permission integrates with Laravel's built-in authorization, so `@can` works seamlessly:
+
+```blade
+@can('edit articles')
+    <a href="{{ route('articles.edit', $article) }}">Edit</a>
+@endcan
+
+@can('delete articles')
+    <button type="submit" class="btn btn-danger">Delete</button>
+@endcan
+```
+
+<Tabs>
+  <Tab title="With @cannot">
+    ```blade
+    @can('edit articles')
+        <a href="{{ route('articles.edit', $article) }}">Edit</a>
+    @elsecan('view articles')
+        <a href="{{ route('articles.show', $article) }}">View</a>
+    @else
+        <span class="text-muted">No access</span>
+    @endcan
+    ```
+  </Tab>
+
+  <Tab title="@cannot">
+    ```blade
+    @cannot('delete articles')
+        <div class="alert alert-warning">
+            You don't have permission to delete articles.
+        </div>
+    @endcannot
+    ```
+  </Tab>
+
+  <Tab title="@canany">
+    ```blade
+    @canany(['edit articles', 'delete articles'])
+        <div class="admin-tools">
+            <!-- Admin tools here -->
+        </div>
+    @endcanany
+    ```
+  </Tab>
+</Tabs>
+
+## Practical Examples
+
+### Navigation Menu
+
+```blade
+<nav class="navbar">
+    <ul class="nav">
+        <li><a href="{{ route('home') }}">Home</a></li>
+        
+        @role('writer|editor|admin')
+            <li><a href="{{ route('articles.index') }}">Articles</a></li>
+        @endrole
+        
+        @can('create articles')
+            <li><a href="{{ route('articles.create') }}">New Article</a></li>
+        @endcan
+        
+        @role('admin')
+            <li><a href="{{ route('admin.users') }}">Users</a></li>
+            <li><a href="{{ route('admin.roles') }}">Roles</a></li>
+        @endrole
+    </ul>
+</nav>
+```
+
+### Article Action Buttons
+
+```blade
+<div class="article-actions">
+    @can('view articles')
+        <a href="{{ route('articles.show', $article) }}" class="btn btn-info">
+            View
+        </a>
+    @endcan
+    
+    @can('edit articles')
+        <a href="{{ route('articles.edit', $article) }}" class="btn btn-primary">
+            Edit
+        </a>
+    @endcan
+    
+    @can('delete articles')
+        <form action="{{ route('articles.destroy', $article) }}" method="POST" class="d-inline">
+            @csrf
+            @method('DELETE')
+            <button type="submit" class="btn btn-danger"
+                    onclick="return confirm('Are you sure?')">
+                Delete
+            </button>
+        </form>
+    @endcan
+    
+    @role('admin')
+        <a href="{{ route('articles.audit', $article) }}" class="btn btn-secondary">
+            Audit Log
+        </a>
+    @endrole
+</div>
+```
+
+### User Dashboard
+
+```blade
+<div class="dashboard">
+    <h1>Dashboard</h1>
+    
+    @hasanyrole('writer|editor')
+        <div class="card">
+            <h3>Your Articles</h3>
+            <p>You have {{ $articleCount }} articles</p>
+            <a href="{{ route('articles.mine') }}">View My Articles</a>
+        </div>
+    @endhasanyrole
+    
+    @role('editor')
+        <div class="card">
+            <h3>Pending Review</h3>
+            <p>{{ $pendingCount }} articles awaiting review</p>
+            <a href="{{ route('articles.pending') }}">Review Articles</a>
+        </div>
+    @endrole
+    
+    @role('admin')
+        <div class="card">
+            <h3>System Stats</h3>
+            <ul>
+                <li>Total Users: {{ $userCount }}</li>
+                <li>Total Articles: {{ $totalArticles }}</li>
+                <li>Active Sessions: {{ $activeSessions }}</li>
+            </ul>
+        </div>
+    @endrole
+</div>
+```
+
+### Admin Settings
+
+```blade
+<div class="settings">
+    <h2>Settings</h2>
+    
+    @haspermission('edit settings')
+        <form action="{{ route('settings.update') }}" method="POST">
+            @csrf
+            <!-- Settings form -->
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    @elsehaspermission
+        <div class="alert alert-info">
+            Settings are view-only. Contact an administrator to make changes.
+        </div>
+        <!-- Read-only settings display -->
+    @endhaspermission
+</div>
+```
+
+## How Directives Work
+
+The directives are registered in the `PermissionServiceProvider`:
+
+```php
+// From: src/PermissionServiceProvider.php:68-82
+
+protected function registerBladeExtensions(BladeCompiler $bladeCompiler): void
+{
+    $bladeMethodWrapper = '\\Spatie\\Permission\\PermissionServiceProvider::bladeMethodWrapper';
+
+    // Permission checks
+    $bladeCompiler->if('haspermission', 
+        fn () => $bladeMethodWrapper('checkPermissionTo', ...func_get_args())
+    );
+
+    // Role checks
+    $bladeCompiler->if('role', 
+        fn () => $bladeMethodWrapper('hasRole', ...func_get_args())
+    );
+    $bladeCompiler->if('hasrole', 
+        fn () => $bladeMethodWrapper('hasRole', ...func_get_args())
+    );
+    $bladeCompiler->if('hasanyrole', 
+        fn () => $bladeMethodWrapper('hasAnyRole', ...func_get_args())
+    );
+    $bladeCompiler->if('hasallroles', 
+        fn () => $bladeMethodWrapper('hasAllRoles', ...func_get_args())
+    );
+    $bladeCompiler->if('hasexactroles', 
+        fn () => $bladeMethodWrapper('hasExactRoles', ...func_get_args())
+    );
+}
+```
+
+The `bladeMethodWrapper` helper:
+
+```php
+// From: src/PermissionServiceProvider.php:63-66
+
+public static function bladeMethodWrapper(string $method, mixed $role, ?string $guard = null): bool
+{
+    return auth($guard)->check() && auth($guard)->user()->{$method}($role);
+}
+```
+
+<Note>
+  All directives automatically check if the user is authenticated. If there's no authenticated user, they return `false`.
+</Note>
+
+## Best Practices
+
+<Tip>
+  **Use @can for permissions**: Prefer `@can` over `@haspermission` as it's Laravel's standard and works with policies too.
+
+  ```blade
+  <!-- Preferred -->
+  @can('edit articles')
+      <button>Edit</button>
+  @endcan
+
+  <!-- Also works -->
+  @haspermission('edit articles')
+      <button>Edit</button>
+  @endhaspermission
+  ```
+</Tip>
+
+<Tip>
+  **Combine with policies**: Use directives for simple checks, policies for complex logic:
+
+  ```blade
+  {{-- Simple permission check --}}
+  @can('edit articles')
+      <button>Edit Any Article</button>
+  @endcan
+
+  {{-- Complex check using policy --}}
+  @can('update', $article)
+      <button>Edit This Article</button>
+  @endcan
+  ```
+</Tip>
+
+<Warning>
+  **Don't rely solely on Blade directives for security**. Always validate permissions on the backend. Blade directives only control what's displayed, not what users can access.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Using Middleware" icon="shield" href="/basic-usage/using-middleware">
+    Protect routes with permission middleware
+  </Card>
+  <Card title="Multiple Guards" icon="shield-halved" href="/advanced-usage/multiple-guards">
+    Use permissions with different authentication guards
+  </Card>
+</CardGroup>

@@ -1,0 +1,344 @@
+---
+title: Performance Optimization
+description: Optimize your Laravel Permission implementation for maximum performance
+---
+
+## Cache Configuration
+
+The package automatically caches all permissions for 24 hours. Configure cache settings for optimal performance.
+
+```php config/permission.php
+return [
+    'cache' => [
+        /*
+         * By default all permissions are cached for 24 hours to speed up performance.
+         * When permissions or roles are updated the cache is flushed automatically.
+         */
+        'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+
+        /*
+         * The cache key used to store all permissions.
+         */
+        'key' => 'spatie.permission.cache',
+
+        /*
+         * You may optionally indicate a specific cache driver to use for permission and
+         * role caching using any of the `store` drivers listed in the cache.php config
+         * file. Using 'default' here means to use the `default` set in cache.php.
+         */
+        'store' => 'default',
+    ],
+];
+```
+
+<Tip>
+For high-traffic applications, use Redis for permission caching:
+
+```php
+'cache' => [
+    'store' => 'redis',
+    'expiration_time' => \DateInterval::createFromDateString('7 days'),
+],
+```
+</Tip>
+
+## Automatic Cache Invalidation
+
+The cache is automatically flushed when permissions or roles are modified. No manual intervention needed.
+
+```php
+// Cache is automatically flushed after these operations:
+Permission::create(['name' => 'new-permission']); // Cache flushed
+$permission->update(['name' => 'updated-name']); // Cache flushed
+$role->givePermissionTo('edit-articles'); // Cache flushed
+$role->removePermission('edit-articles'); // Cache flushed
+
+// Cache is NOT flushed for user-level changes (performance optimization):
+$user->givePermissionTo('edit-articles'); // Cache NOT flushed ✓
+$user->assignRole('admin'); // Cache NOT flushed ✓
+```
+
+<Note>
+User-level permission assignments don't flush the cache because they don't change the global permission structure. This is a performance optimization since user operations are more frequent.
+</Note>
+
+## Cache Size Optimization
+
+The package optimizes cache size by aliasing column names and excluding unnecessary fields.
+
+```php config/permission.php
+return [
+    'cache' => [
+        /*
+         * Columns to exclude from cache to reduce size.
+         * Timestamps are typically not needed for permission checks.
+         */
+        'column_names_except' => ['created_at', 'updated_at', 'deleted_at'],
+    ],
+];
+```
+
+<Accordion title="How Cache Aliasing Works">
+The `PermissionRegistrar` uses single-letter aliases for column names to reduce cache size:
+
+```php
+// Original data:
+['id' => 1, 'name' => 'edit-articles', 'guard_name' => 'web']
+
+// Cached with aliases:
+['a' => 1, 'b' => 'edit-articles', 'c' => 'web']
+
+// Savings: ~40-60% smaller cache footprint
+```
+
+This is handled automatically in `getSerializedPermissionsForCache()` at line 310 of `PermissionRegistrar.php`.
+</Accordion>
+
+## Eager Loading Relationships
+
+Always eager load roles and permissions to avoid N+1 query problems.
+
+```php
+// ❌ Bad: N+1 queries
+$users = User::all();
+foreach ($users as $user) {
+    if ($user->hasPermissionTo('edit-articles')) {
+        // Queries executed for each user
+    }
+}
+
+// ✅ Good: Eager loading
+$users = User::with(['roles.permissions', 'permissions'])->get();
+foreach ($users as $user) {
+    if ($user->hasPermissionTo('edit-articles')) {
+        // Uses preloaded data
+    }
+}
+```
+
+<Tip>
+The package caches permission data globally, but eager loading user relationships still provides significant performance benefits:
+
+```php
+// Load user with relationships before checking
+$user->loadMissing('roles', 'permissions');
+
+// Now permission checks use cached data + preloaded relationships
+$user->hasPermissionTo('edit-articles'); // Optimized
+```
+</Tip>
+
+## Query Scope Performance
+
+Use query scopes efficiently to filter users by permissions without loading all users.
+
+```php
+// ✅ Good: Database-level filtering
+$editors = User::permission('edit-articles')->get();
+
+// ❌ Bad: Loading all then filtering in PHP
+$editors = User::all()->filter(function ($user) {
+    return $user->hasPermissionTo('edit-articles');
+});
+```
+
+<Warning>
+Scoping queries by permissions involves joins. For very large datasets, consider:
+
+1. Adding database indexes on pivot tables
+2. Using database-specific optimizations
+3. Caching frequently-accessed queries
+
+```php
+// Add indexes in your migration
+$table->index(['model_id', 'model_type']);
+$table->index(['permission_id']);
+$table->index(['role_id']);
+```
+</Warning>
+
+## Concurrent Request Handling
+
+The package implements thread-safe permission loading to prevent cache stampede in concurrent environments.
+
+```php
+// From PermissionRegistrar.php:175
+private function loadPermissions(int $retries = 0): void
+{
+    // First check - fast path for already loaded
+    if ($this->permissions) {
+        return;
+    }
+
+    // Prevent concurrent loading using flag-based lock
+    if ($this->isLoadingPermissions && $retries < 10) {
+        usleep(10000); // Wait 10ms
+        $retries++;
+        $this->loadPermissions($retries);
+        return;
+    }
+
+    $this->isLoadingPermissions = true;
+    // Load permissions...
+    $this->isLoadingPermissions = false;
+}
+```
+
+<Note>
+This implementation prevents duplicate database queries when multiple requests hit the cache simultaneously. Essential for Laravel Octane, Swoole, and high-concurrency applications.
+</Note>
+
+## Laravel Octane Optimization
+
+Configure automatic cache resets for Octane/Swoole long-running processes.
+
+```php config/permission.php
+return [
+    /*
+     * When set to true, Laravel\Octane\Events\OperationTerminated event listener will be registered
+     * this will refresh permissions on every TickTerminated, TaskTerminated and RequestTerminated
+     * NOTE: This should not be needed in most cases, but an Octane/Vapor combination benefited from it.
+     */
+    'register_octane_reset_listener' => false,
+];
+```
+
+<Tip>
+For Octane applications, the package automatically clears in-memory permission collections:
+
+```php
+// Automatically called on each request in Octane
+public function clearPermissionsCollection(): void
+{
+    $this->permissions = null;
+    $this->wildcardPermissionsIndex = [];
+    $this->isLoadingPermissions = false;
+}
+```
+
+Only enable `register_octane_reset_listener` if you experience stale permission data.
+</Tip>
+
+## Sync Operations Performance
+
+Use `syncPermissions()` instead of revoking and re-granting to minimize queries.
+
+```php
+// ❌ Bad: Multiple queries
+$user->revokePermissionTo(['edit-articles', 'edit-news']);
+$user->givePermissionTo(['edit-blog', 'publish-blog']);
+// Total: 4+ queries
+
+// ✅ Good: Single sync operation
+$user->syncPermissions(['edit-blog', 'publish-blog']);
+// Total: 2 queries (1 detach, 1 attach)
+```
+
+<Accordion title="Sync Operation Query Count">
+From `HasPermissionsTest.php:523`:
+
+```php
+DB::enableQueryLog();
+$user->syncPermissions($permission1, $permission2);
+DB::disableQueryLog();
+
+count(DB::getQueryLog()); // Only 2 queries
+```
+
+The package is optimized to avoid unnecessary SQL operations during sync.
+</Accordion>
+
+## Batch Permission Checks
+
+Check multiple permissions in a single call to reduce overhead.
+
+```php
+// ✅ Good: Single check for multiple permissions
+if ($user->hasAllPermissions(['edit-articles', 'publish-articles', 'delete-articles'])) {
+    // User has all permissions
+}
+
+if ($user->hasAnyPermission(['edit-articles', 'view-articles'])) {
+    // User has at least one permission
+}
+
+// ❌ Bad: Multiple individual checks
+if ($user->hasPermissionTo('edit-articles') && 
+    $user->hasPermissionTo('publish-articles') && 
+    $user->hasPermissionTo('delete-articles')) {
+    // More overhead
+}
+```
+
+## Manual Cache Control
+
+Manually flush cache when needed for bulk operations.
+
+```php
+use Spatie\Permission\PermissionRegistrar;
+
+// After bulk permission changes
+DB::transaction(function () {
+    // Bulk operations...
+    Permission::insert([...]);
+    Role::insert([...]);
+});
+
+// Manually flush cache
+app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+// Or via Artisan
+Artisan::call('permission:cache-reset');
+```
+
+<Warning>
+The cache is shared across all application instances. When using multiple servers, ensure your cache driver (Redis, Memcached) is shared, or cache invalidation won't propagate.
+</Warning>
+
+## Database Optimization Tips
+
+<Accordion title="Recommended Database Indexes">
+```sql
+-- model_has_permissions table
+CREATE INDEX model_has_permissions_model_id_model_type_index 
+  ON model_has_permissions(model_id, model_type);
+CREATE INDEX model_has_permissions_permission_id_index 
+  ON model_has_permissions(permission_id);
+CREATE INDEX model_has_permissions_team_id_index 
+  ON model_has_permissions(team_id); -- if using teams
+
+-- model_has_roles table
+CREATE INDEX model_has_roles_model_id_model_type_index 
+  ON model_has_roles(model_id, model_type);
+CREATE INDEX model_has_roles_role_id_index 
+  ON model_has_roles(role_id);
+CREATE INDEX model_has_roles_team_id_index 
+  ON model_has_roles(team_id); -- if using teams
+
+-- role_has_permissions table
+CREATE INDEX role_has_permissions_role_id_index 
+  ON role_has_permissions(role_id);
+CREATE INDEX role_has_permissions_permission_id_index 
+  ON role_has_permissions(permission_id);
+```
+
+These indexes are automatically created by the package migrations.
+</Accordion>
+
+## Check Permission via Roles
+
+Store permissions on roles rather than directly on users when possible.
+
+```php
+// ✅ Good: Permission through role (fewer database rows)
+$role = Role::create(['name' => 'editor']);
+$role->givePermissionTo(['edit-articles', 'publish-articles']);
+$user->assignRole('editor'); // 1 row in model_has_roles
+
+// ⚠️ Less efficient: Direct permissions (more database rows)
+$user->givePermissionTo(['edit-articles', 'publish-articles']); // 2 rows in model_has_permissions
+```
+
+<Note>
+With role-based permissions, you have fewer rows in pivot tables and simpler permission management. However, direct permissions are still valuable for user-specific overrides.
+</Note>

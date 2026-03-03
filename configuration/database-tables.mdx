@@ -1,0 +1,353 @@
+---
+title: Database Tables
+description: Complete database schema reference for Laravel Permission
+icon: database
+---
+
+Laravel Permission uses five database tables to manage permissions and roles. This guide documents the complete schema structure and relationships.
+
+## Running Migrations
+
+Publish and run the migrations:
+
+```bash
+php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
+php artisan migrate
+```
+
+## Table Overview
+
+The package creates five interconnected tables:
+
+| Table | Purpose |
+|-------|----------|
+| `permissions` | Stores all permission definitions |
+| `roles` | Stores all role definitions |
+| `model_has_permissions` | Links models directly to permissions |
+| `model_has_roles` | Links models to roles |
+| `role_has_permissions` | Links roles to permissions |
+
+## Table Schemas
+
+### permissions Table
+
+Stores all permission definitions in your application.
+
+```sql
+CREATE TABLE permissions (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    guard_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    UNIQUE KEY (name, guard_name)
+);
+```
+
+**Columns:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint unsigned | Primary key |
+| `name` | varchar(255) | Permission name (e.g., 'edit articles') |
+| `guard_name` | varchar(255) | Guard name (e.g., 'web', 'api') |
+| `created_at` | timestamp | Creation timestamp |
+| `updated_at` | timestamp | Last update timestamp |
+
+**Indexes:**
+- Unique composite index on `(name, guard_name)`
+
+<Note>
+If you encounter "1071 Specified key was too long" errors, reduce the length of `name` and `guard_name` columns or use the `utf8mb4` charset with the `utf8mb4_bin` collation.
+</Note>
+
+### roles Table
+
+Stores all role definitions in your application.
+
+```sql
+CREATE TABLE roles (
+    id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+    team_id BIGINT UNSIGNED NULL,           -- only if teams enabled
+    name VARCHAR(255) NOT NULL,
+    guard_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NULL,
+    updated_at TIMESTAMP NULL,
+    INDEX roles_team_foreign_key_index (team_id),  -- only if teams enabled
+    UNIQUE KEY (team_id, name, guard_name)         -- with teams
+    -- OR --
+    UNIQUE KEY (name, guard_name)                  -- without teams
+);
+```
+
+**Columns:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint unsigned | Primary key |
+| `team_id` | bigint unsigned | Team ID (only with teams feature) |
+| `name` | varchar(255) | Role name (e.g., 'admin', 'editor') |
+| `guard_name` | varchar(255) | Guard name (e.g., 'web', 'api') |
+| `created_at` | timestamp | Creation timestamp |
+| `updated_at` | timestamp | Last update timestamp |
+
+**Indexes:**
+- Index on `team_id` (when teams enabled)
+- Unique composite index on `(team_id, name, guard_name)` with teams
+- Unique composite index on `(name, guard_name)` without teams
+
+### model_has_permissions Table
+
+Pivot table linking models directly to permissions (bypassing roles).
+
+```sql
+CREATE TABLE model_has_permissions (
+    permission_id BIGINT UNSIGNED NOT NULL,
+    model_type VARCHAR(255) NOT NULL,
+    model_id BIGINT UNSIGNED NOT NULL,
+    team_id BIGINT UNSIGNED NULL,           -- only if teams enabled
+    PRIMARY KEY (team_id, permission_id, model_id, model_type),  -- with teams
+    -- OR --
+    PRIMARY KEY (permission_id, model_id, model_type),           -- without teams
+    INDEX model_has_permissions_model_id_model_type_index (model_id, model_type),
+    INDEX model_has_permissions_team_foreign_key_index (team_id),  -- only if teams enabled
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE
+);
+```
+
+**Columns:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `permission_id` | bigint unsigned | Foreign key to permissions table |
+| `model_type` | varchar(255) | Polymorphic model class name |
+| `model_id` | bigint unsigned | ID of the model (e.g., user ID) |
+| `team_id` | bigint unsigned | Team ID (only with teams feature) |
+
+**Indexes:**
+- Composite index on `(model_id, model_type)` for efficient lookups
+- Index on `team_id` (when teams enabled)
+- Foreign key constraint on `permission_id`
+
+**Example Data:**
+```
+permission_id | model_type      | model_id | team_id
+5             | App\Models\User | 123      | 1
+7             | App\Models\User | 123      | 1
+```
+
+### model_has_roles Table
+
+Pivot table linking models to roles.
+
+```sql
+CREATE TABLE model_has_roles (
+    role_id BIGINT UNSIGNED NOT NULL,
+    model_type VARCHAR(255) NOT NULL,
+    model_id BIGINT UNSIGNED NOT NULL,
+    team_id BIGINT UNSIGNED NULL,           -- only if teams enabled
+    PRIMARY KEY (team_id, role_id, model_id, model_type),  -- with teams
+    -- OR --
+    PRIMARY KEY (role_id, model_id, model_type),           -- without teams
+    INDEX model_has_roles_model_id_model_type_index (model_id, model_type),
+    INDEX model_has_roles_team_foreign_key_index (team_id),  -- only if teams enabled
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+```
+
+**Columns:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `role_id` | bigint unsigned | Foreign key to roles table |
+| `model_type` | varchar(255) | Polymorphic model class name |
+| `model_id` | bigint unsigned | ID of the model (e.g., user ID) |
+| `team_id` | bigint unsigned | Team ID (only with teams feature) |
+
+**Indexes:**
+- Composite index on `(model_id, model_type)` for efficient lookups
+- Index on `team_id` (when teams enabled)
+- Foreign key constraint on `role_id`
+
+**Example Data:**
+```
+role_id | model_type      | model_id | team_id
+2       | App\Models\User | 123      | 1
+3       | App\Models\User | 456      | 2
+```
+
+### role_has_permissions Table
+
+Pivot table linking roles to permissions.
+
+```sql
+CREATE TABLE role_has_permissions (
+    permission_id BIGINT UNSIGNED NOT NULL,
+    role_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (permission_id, role_id),
+    FOREIGN KEY (permission_id) REFERENCES permissions(id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+);
+```
+
+**Columns:**
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `permission_id` | bigint unsigned | Foreign key to permissions table |
+| `role_id` | bigint unsigned | Foreign key to roles table |
+
+**Indexes:**
+- Composite primary key on `(permission_id, role_id)`
+- Foreign key constraints on both columns
+
+**Example Data:**
+```
+permission_id | role_id
+1             | 2
+3             | 2
+4             | 2
+1             | 3
+```
+
+## Relationship Diagram
+
+```
+┌─────────────┐         ┌──────────────┐         ┌───────┐
+│   Models    │────────►│ model_has_   │────────►│ Roles │
+│  (e.g. User)│         │    roles     │         └───┬───┘
+└──────┬──────┘         └──────────────┘             │
+       │                                             │
+       │                ┌──────────────┐             │
+       └───────────────►│ model_has_   │             │
+                        │ permissions  │             │
+                        └──────┬───────┘             │
+                               │                     │
+                               │    ┌────────────┐   │
+                               └───►│Permissions │◄──┘
+                                    │            │
+                                    └────────────┘
+                                         ▲
+                                         │
+                                         │
+                                    ┌────┴────────┐
+                                    │role_has_    │
+                                    │permissions  │
+                                    └─────────────┘
+```
+
+## Customizing Table Names
+
+You can customize table names in `config/permission.php` before running migrations:
+
+```php
+'table_names' => [
+    'roles' => 'user_roles',
+    'permissions' => 'app_permissions',
+    'model_has_permissions' => 'user_permissions',
+    'model_has_roles' => 'user_role_assignments',
+    'role_has_permissions' => 'role_permission_assignments',
+],
+```
+
+<Warning>
+Customize table names BEFORE running migrations. Changing them after migration requires manual database changes.
+</Warning>
+
+## Customizing Column Names
+
+You can also customize key column names:
+
+```php
+'column_names' => [
+    'role_pivot_key' => 'custom_role_id',
+    'permission_pivot_key' => 'custom_permission_id',
+    'model_morph_key' => 'model_uuid',  // useful for UUID primary keys
+    'team_foreign_key' => 'organization_id',
+],
+```
+
+## Adding Teams Support
+
+If you need to add teams support to an existing installation:
+
+<Steps>
+  <Step title="Enable teams in config">
+    Set `'teams' => true` in `config/permission.php`
+  </Step>
+  
+  <Step title="Generate migration">
+    Run the setup command:
+    ```bash
+    php artisan permission:setup-teams
+    ```
+  </Step>
+  
+  <Step title="Review the migration">
+    Check the generated migration in `database/migrations/`
+  </Step>
+  
+  <Step title="Run migration">
+    ```bash
+    php artisan migrate
+    ```
+  </Step>
+  
+  <Step title="Clear cache">
+    ```bash
+    php artisan permission:cache-reset
+    php artisan config:clear
+    ```
+  </Step>
+</Steps>
+
+The teams migration adds `team_id` columns to:
+- `roles`
+- `model_has_permissions`
+- `model_has_roles`
+
+## Database Best Practices
+
+<Steps>
+  <Step title="Use indexes">
+    The default migration includes all necessary indexes. Don't remove them as they're critical for performance.
+  </Step>
+  
+  <Step title="Foreign key constraints">
+    Keep the CASCADE DELETE constraints to automatically clean up related records.
+  </Step>
+  
+  <Step title="Backup before schema changes">
+    Always backup your database before modifying the permission tables structure.
+  </Step>
+  
+  <Step title="Test in staging">
+    Test any schema modifications in a staging environment first.
+  </Step>
+</Steps>
+
+## Querying Tables Directly
+
+While you should typically use the package's models, you can query tables directly if needed:
+
+```php
+use Illuminate\Support\Facades\DB;
+
+// Get all permissions for a user
+$permissions = DB::table('model_has_permissions')
+    ->join('permissions', 'permissions.id', '=', 'model_has_permissions.permission_id')
+    ->where('model_type', 'App\\Models\\User')
+    ->where('model_id', $userId)
+    ->get();
+
+// Get all users with a specific role
+$users = DB::table('model_has_roles')
+    ->join('roles', 'roles.id', '=', 'model_has_roles.role_id')
+    ->where('roles.name', 'admin')
+    ->where('model_type', 'App\\Models\\User')
+    ->pluck('model_id');
+```
+
+<Note>
+Direct database queries bypass the permission cache. Use the package's models and methods for better performance.
+</Note>

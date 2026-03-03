@@ -1,0 +1,283 @@
+---
+title: 'Teams & Permissions'
+description: 'Scope permissions and roles to specific teams or tenants'
+icon: 'users'
+---
+
+The package supports multi-tenancy through a teams feature, allowing you to scope permissions and roles to specific teams or tenants. This is useful for SaaS applications where users belong to different organizations.
+
+## Configuration
+
+<Steps>
+  <Step title="Enable Teams Feature">
+    Open your `config/permission.php` file and enable the teams feature:
+
+    ```php config/permission.php
+    'teams' => true,
+    ```
+
+    <Note>
+      This must be set to `true` **before** running migrations. If you've already run migrations, you'll need to create a new migration to add the team foreign key column.
+    </Note>
+  </Step>
+
+  <Step title="Configure Team Foreign Key">
+    The default team foreign key column name is `team_id`. You can customize this:
+
+    ```php config/permission.php
+    'column_names' => [
+        'team_foreign_key' => 'team_id', // Change to your column name
+    ],
+    ```
+  </Step>
+
+  <Step title="Run Migrations">
+    When teams are enabled, the migration will add the `team_id` column to:
+    - `roles` table
+    - `model_has_roles` pivot table
+    - `model_has_permissions` pivot table
+
+    ```bash
+    php artisan migrate
+    ```
+  </Step>
+</Steps>
+
+## Custom Team Resolver
+
+The package uses a team resolver to determine which team context to use for permissions.
+
+### Default Team Resolver
+
+The default implementation is simple:
+
+```php
+namespace Spatie\Permission;
+
+use Illuminate\Database\Eloquent\Model;
+use Spatie\Permission\Contracts\PermissionsTeamResolver;
+
+class DefaultTeamResolver implements PermissionsTeamResolver
+{
+    protected int|string|null $teamId = null;
+
+    public function setPermissionsTeamId(int|string|Model|null $id): void
+    {
+        if ($id instanceof Model) {
+            $id = $id->getKey();
+        }
+        $this->teamId = $id;
+    }
+
+    public function getPermissionsTeamId(): int|string|null
+    {
+        return $this->teamId;
+    }
+}
+```
+
+### Creating a Custom Resolver
+
+Create your own resolver to automatically detect the team from the authenticated user:
+
+```php app/Services/CustomTeamResolver.php
+namespace App\Services;
+
+use Illuminate\Database\Eloquent\Model;
+use Spatie\Permission\Contracts\PermissionsTeamResolver;
+
+class CustomTeamResolver implements PermissionsTeamResolver
+{
+    public function setPermissionsTeamId(int|string|Model|null $id): void
+    {
+        // Store in session or cache
+        session(['team_id' => $id instanceof Model ? $id->getKey() : $id]);
+    }
+
+    public function getPermissionsTeamId(): int|string|null
+    {
+        // Auto-detect from authenticated user
+        if (auth()->check() && auth()->user()->current_team_id) {
+            return auth()->user()->current_team_id;
+        }
+        
+        return session('team_id');
+    }
+}
+```
+
+Register your resolver in `config/permission.php`:
+
+```php config/permission.php
+'team_resolver' => \App\Services\CustomTeamResolver::class,
+```
+
+## Usage
+
+### Setting the Team Context
+
+Use the helper function or facade to set the current team:
+
+```php
+// Using helper function
+setPermissionsTeamId($team->id);
+
+// Using model instance
+setPermissionsTeamId($team);
+
+// Using Permission Registrar
+app(\Spatie\Permission\PermissionRegistrar::class)->setPermissionsTeamId($team->id);
+```
+
+### Getting the Current Team
+
+```php
+// Using helper function
+$teamId = getPermissionsTeamId();
+
+// Using Permission Registrar
+$teamId = app(\Spatie\Permission\PermissionRegistrar::class)->getPermissionsTeamId();
+```
+
+### Creating Team-Scoped Roles
+
+When teams are enabled, roles automatically include the team context:
+
+```php
+setPermissionsTeamId(1);
+
+$role = Role::create([
+    'name' => 'admin',
+    'team_id' => 1 // Automatically set if not provided
+]);
+
+// Or explicitly set the team
+$role = Role::create([
+    'name' => 'admin',
+    'team_id' => 2
+]);
+```
+
+### Global Roles
+
+Roles with `null` team_id are available to all teams:
+
+```php
+$globalRole = Role::create([
+    'name' => 'super-admin',
+    'team_id' => null
+]);
+```
+
+### Assigning Team-Scoped Roles
+
+```php
+setPermissionsTeamId($team->id);
+
+// Role will be assigned with the current team context
+$user->assignRole('admin');
+
+// Check role in team context
+$user->hasRole('admin'); // true only for current team
+```
+
+### Team-Scoped Permissions
+
+```php
+setPermissionsTeamId($team->id);
+
+// Permission will be assigned with the current team context
+$user->givePermissionTo('edit posts');
+
+// Check permission in team context
+$user->hasPermissionTo('edit posts'); // true only for current team
+```
+
+## Middleware Example
+
+Automatically set the team context for each request:
+
+```php app/Http/Middleware/SetPermissionsTeamId.php
+namespace App\Http\Middleware;
+
+use Closure;
+use Illuminate\Http\Request;
+
+class SetPermissionsTeamId
+{
+    public function handle(Request $request, Closure $next)
+    {
+        if (auth()->check() && auth()->user()->current_team_id) {
+            setPermissionsTeamId(auth()->user()->current_team_id);
+        }
+        
+        return $next($request);
+    }
+}
+```
+
+Register in `app/Http/Kernel.php`:
+
+```php
+protected $middlewareGroups = [
+    'web' => [
+        // ...
+        \App\Http\Middleware\SetPermissionsTeamId::class,
+    ],
+];
+```
+
+## Important Considerations
+
+<Warning>
+  When teams are enabled:
+  - All permission and role queries are scoped to the current team context
+  - You must set the team context before checking permissions
+  - Roles and permissions assigned without a team context may not be accessible
+</Warning>
+
+<Tip>
+  For SaaS applications, consider:
+  - Setting the team context in middleware based on subdomain or user preference
+  - Creating global super-admin roles with `team_id = null`
+  - Implementing team switching functionality with proper context updates
+</Tip>
+
+## Team Switching
+
+When users switch teams, update the context:
+
+```php
+public function switchTeam(Team $team)
+{
+    // Update user's current team
+    auth()->user()->update(['current_team_id' => $team->id]);
+    
+    // Update permission context
+    setPermissionsTeamId($team->id);
+    
+    // Clear any cached permissions
+    app(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+    
+    return redirect()->route('dashboard');
+}
+```
+
+## Querying Roles by Team
+
+The `findByName` and `findById` methods respect the team context:
+
+```php
+setPermissionsTeamId(1);
+
+// Finds role for team 1 OR global roles (team_id = null)
+$role = Role::findByName('admin');
+
+// Find role for specific team
+$role = Role::where('name', 'admin')
+    ->where(function ($q) {
+        $q->whereNull('team_id')
+          ->orWhere('team_id', 1);
+    })
+    ->first();
+```

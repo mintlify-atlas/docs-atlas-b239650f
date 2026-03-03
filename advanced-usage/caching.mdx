@@ -1,0 +1,458 @@
+---
+title: 'Caching'
+description: 'Understand and configure permission caching for optimal performance'
+icon: 'bolt'
+---
+
+The package automatically caches permissions to improve performance. Understanding how caching works helps you optimize your application.
+
+## How Caching Works
+
+Permissions are cached to avoid repeated database queries. The cache includes:
+- All permissions with their associated roles
+- Permission-role relationships
+- Optimized data structure for quick lookups
+
+### Default Configuration
+
+```php config/permission.php
+'cache' => [
+    // Cache for 24 hours
+    'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+    
+    // Cache key
+    'key' => 'spatie.permission.cache',
+    
+    // Use default cache driver from config/cache.php
+    'store' => 'default',
+],
+```
+
+## Cache Store Options
+
+### Using Default Cache
+
+The default configuration uses your application's default cache driver:
+
+```php config/permission.php
+'cache' => [
+    'store' => 'default', // Uses config('cache.default')
+],
+```
+
+### Using Specific Driver
+
+Specify a particular cache driver:
+
+```php config/permission.php
+'cache' => [
+    'store' => 'redis',    // Use Redis
+    // 'store' => 'memcached', // Use Memcached  
+    // 'store' => 'file',      // Use File cache
+    // 'store' => 'database',  // Use Database cache
+],
+```
+
+<Note>
+  The cache driver must be defined in `config/cache.php`. If an undefined driver is specified, the package falls back to the 'array' driver.
+</Note>
+
+### Fallback Behavior
+
+From the source code:
+
+```php
+protected function getCacheStoreFromConfig(): Repository
+{
+    $cacheDriver = config('permission.cache.store', 'default');
+    
+    // Use default if 'default' is specified
+    if ($cacheDriver === 'default') {
+        return $this->cacheManager->store();
+    }
+    
+    // Fallback to 'array' for undefined drivers
+    if (! array_key_exists($cacheDriver, config('cache.stores'))) {
+        $cacheDriver = 'array';
+    }
+    
+    return $this->cacheManager->store($cacheDriver);
+}
+```
+
+## Cache Expiration
+
+### Setting Expiration Time
+
+```php config/permission.php
+'cache' => [
+    // Using DateInterval
+    'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+    
+    // Or use seconds (integer)
+    // 'expiration_time' => 86400, // 24 hours in seconds
+],
+```
+
+### Custom Expiration Examples
+
+```php
+// 1 hour
+'expiration_time' => \DateInterval::createFromDateString('1 hour'),
+
+// 30 minutes
+'expiration_time' => \DateInterval::createFromDateString('30 minutes'),
+
+// 7 days
+'expiration_time' => \DateInterval::createFromDateString('7 days'),
+
+// Using seconds
+'expiration_time' => 3600, // 1 hour
+```
+
+## Automatic Cache Management
+
+The cache is automatically cleared when permissions or roles are modified.
+
+### Cache Clears On
+
+- Creating a permission
+- Updating a permission
+- Deleting a permission
+- Creating a role
+- Updating a role
+- Deleting a role
+- Assigning permissions to roles
+- Revoking permissions from roles
+- Syncing permissions
+
+### Implementation
+
+Models use the `RefreshesPermissionCache` trait:
+
+```php
+namespace Spatie\Permission\Models;
+
+use Spatie\Permission\Traits\RefreshesPermissionCache;
+
+class Permission extends Model
+{
+    use RefreshesPermissionCache;
+    
+    // Cache is automatically cleared on save, delete, etc.
+}
+```
+
+## Manual Cache Management
+
+### Clear Cache Programmatically
+
+```php
+use Spatie\Permission\PermissionRegistrar;
+
+// Clear the cache
+app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+// Or use the trait method
+$user->forgetCachedPermissions();
+```
+
+### Clear Cache via Artisan
+
+```bash
+php artisan permission:cache-reset
+```
+
+<Tip>
+  Use this command after:
+  - Deploying new code
+  - Running seeders
+  - Manually modifying permission tables
+  - Importing permissions from external sources
+</Tip>
+
+## Wildcard Permission Cache
+
+When wildcard permissions are enabled, an additional index is cached per user/role:
+
+```php
+// Wildcard cache is cleared automatically
+$user->givePermissionTo('posts.*');
+
+// Or manually
+app(PermissionRegistrar::class)->forgetWildcardPermissionIndex($user);
+
+// Clear for all users
+app(PermissionRegistrar::class)->forgetWildcardPermissionIndex();
+```
+
+## Cache Structure
+
+The cache stores a compressed, aliased structure to minimize memory usage.
+
+### Aliasing System
+
+Column names are aliased to single characters:
+
+```php
+// From PermissionRegistrar.php
+private function aliasModelFields(Model $newKeys): void
+{
+    $i = 0;
+    $alphas = ! count($this->alias) ? range('a', 'h') : range('j', 'p');
+    
+    foreach (array_keys($newKeys->getAttributes()) as $value) {
+        if (! isset($this->alias[$value])) {
+            $this->alias[$value] = $alphas[$i++] ?? $value;
+        }
+    }
+}
+```
+
+### Cached Data
+
+The cache includes:
+
+```php
+[
+    'alias' => [
+        'id' => 'a',
+        'name' => 'b',
+        'guard_name' => 'c',
+        // ...
+    ],
+    'permissions' => [
+        // Aliased permission data
+    ],
+    'roles' => [
+        // Aliased role data
+    ],
+]
+```
+
+### Excluding Columns from Cache
+
+Reduce cache size by excluding unnecessary columns:
+
+```php config/permission.php
+'cache' => [
+    'column_names_except' => ['created_at', 'updated_at', 'deleted_at'],
+],
+```
+
+## Long-Running Applications
+
+### Laravel Octane / Swoole
+
+For long-running processes, the cache is cleared on worker restart:
+
+```php config/permission.php
+'register_octane_reset_listener' => true,
+```
+
+This registers a listener for:
+- `OperationTerminated`
+- `TickTerminated`
+- `TaskTerminated`
+- `RequestTerminated`
+
+```php
+// From PermissionServiceProvider.php
+if (config('permission.register_octane_reset_listener')) {
+    Event::listen(OperationTerminated::class, function () {
+        app(PermissionRegistrar::class)->clearPermissionsCollection();
+    });
+}
+```
+
+<Warning>
+  Only enable `register_octane_reset_listener` if you're using Laravel Octane or a similar long-running environment. It's not needed for standard PHP-FPM applications.
+</Warning>
+
+### Thread-Safe Loading
+
+The package prevents race conditions in concurrent environments:
+
+```php
+private function loadPermissions(int $retries = 0): void
+{
+    // Fast path - already loaded
+    if ($this->permissions) {
+        return;
+    }
+    
+    // Prevent concurrent loading
+    if ($this->isLoadingPermissions && $retries < 10) {
+        usleep(10000); // Wait 10ms
+        $retries++;
+        $this->loadPermissions($retries);
+        return;
+    }
+    
+    // Set loading flag
+    $this->isLoadingPermissions = true;
+    
+    try {
+        // Load from cache or database
+        $this->permissions = $this->cache->remember(
+            $this->cacheKey, 
+            $this->cacheExpirationTime, 
+            fn () => $this->getSerializedPermissionsForCache()
+        );
+    } finally {
+        $this->isLoadingPermissions = false;
+    }
+}
+```
+
+## Performance Optimization
+
+### Redis Recommended for Production
+
+```php config/cache.php
+'default' => env('CACHE_DRIVER', 'redis'),
+
+'stores' => [
+    'redis' => [
+        'driver' => 'redis',
+        'connection' => 'cache',
+        'lock_connection' => 'default',
+    ],
+],
+```
+
+```env .env
+CACHE_DRIVER=redis
+REDIS_HOST=127.0.0.1
+REDIS_PASSWORD=null
+REDIS_PORT=6379
+```
+
+### File Cache for Simple Applications
+
+```env .env
+CACHE_DRIVER=file
+```
+
+### Database Cache (Not Recommended)
+
+```env .env
+CACHE_DRIVER=database
+```
+
+<Warning>
+  Avoid using database cache for permissions as it defeats the purpose of caching. Use Redis or file cache instead.
+</Warning>
+
+## Cache Key Management
+
+### Custom Cache Key
+
+```php config/permission.php
+'cache' => [
+    'key' => 'my_app.permissions',
+],
+```
+
+### Multiple Applications Sharing Cache
+
+Use different cache keys for each application:
+
+```php
+// App 1
+'cache' => ['key' => 'app1.permissions'],
+
+// App 2
+'cache' => ['key' => 'app2.permissions'],
+```
+
+## Monitoring Cache
+
+### Check if Cache Exists
+
+```php
+use Spatie\Permission\PermissionRegistrar;
+
+$registrar = app(PermissionRegistrar::class);
+$cache = $registrar->getCacheRepository();
+
+if ($cache->has('spatie.permission.cache')) {
+    // Cache exists
+}
+```
+
+### Get Cache Store Information
+
+```php
+$store = $registrar->getCacheStore();
+
+// Check store type
+if ($store instanceof \Illuminate\Cache\RedisStore) {
+    // Using Redis
+}
+```
+
+## Debugging Cache Issues
+
+### Clear All Cache
+
+```bash
+# Clear application cache
+php artisan cache:clear
+
+# Clear permission cache specifically
+php artisan permission:cache-reset
+
+# Clear config cache (may affect permission config)
+php artisan config:clear
+```
+
+### Disable Cache Temporarily
+
+For debugging, use the array cache driver:
+
+```php config/permission.php
+'cache' => [
+    'store' => 'array', // Not persistent, clears after request
+    'expiration_time' => 1, // Short expiration
+],
+```
+
+<Note>
+  The 'array' driver doesn't persist between requests, effectively disabling cache. Only use this for debugging.
+</Note>
+
+## Best Practices
+
+<Accordion title="Production Configuration">
+  ```php
+  'cache' => [
+      'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+      'key' => 'spatie.permission.cache',
+      'store' => 'redis',
+  ],
+  ```
+  Use Redis with a 24-hour expiration for optimal performance.
+</Accordion>
+
+<Accordion title="Development Configuration">
+  ```php
+  'cache' => [
+      'expiration_time' => \DateInterval::createFromDateString('5 minutes'),
+      'key' => 'spatie.permission.cache',
+      'store' => 'file',
+  ],
+  ```
+  Use file cache with short expiration during development for easier debugging.
+</Accordion>
+
+<Accordion title="Testing Configuration">
+  ```php
+  'cache' => [
+      'expiration_time' => 1,
+      'key' => 'spatie.permission.cache.test',
+      'store' => 'array',
+  ],
+  ```
+  Use array driver in tests to avoid cache pollution between tests.
+</Accordion>

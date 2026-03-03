@@ -1,0 +1,325 @@
+---
+title: Prerequisites
+description: System requirements and dependencies for Laravel Permission
+---
+
+## System Requirements
+
+Before installing Laravel Permission, ensure your system meets the following requirements:
+
+### PHP Version
+
+<Info>
+  **Minimum Required:** PHP 8.4 or higher
+</Info>
+
+Laravel Permission requires PHP 8.4 or later. You can check your PHP version by running:
+
+```bash
+php --version
+```
+
+If you need to upgrade PHP, consult your hosting provider's documentation or use a version manager like [phpenv](https://github.com/phpenv/phpenv) or [Laravel Valet](https://laravel.com/docs/valet).
+
+### Laravel Version
+
+<Info>
+  **Supported Versions:** Laravel 12.x and 13.x
+</Info>
+
+This package is designed for Laravel 12.0 or higher. Check your Laravel version:
+
+```bash
+php artisan --version
+```
+
+<Note>
+  Using an older version of Laravel? Check the [compatibility table](#version-compatibility) below for the appropriate package version.
+</Note>
+
+## Required Dependencies
+
+Laravel Permission depends on several Laravel components that are typically included in a standard Laravel installation:
+
+<CardGroup cols={2}>
+  <Card title="illuminate/auth" icon="shield">
+    Laravel's authentication system for managing guards and user authentication
+  </Card>
+  <Card title="illuminate/database" icon="database">
+    Laravel's database layer for Eloquent models and migrations
+  </Card>
+  <Card title="illuminate/container" icon="box">
+    Laravel's service container for dependency injection
+  </Card>
+  <Card title="illuminate/contracts" icon="file-contract">
+    Laravel's contract interfaces
+  </Card>
+</CardGroup>
+
+These dependencies are automatically installed when you require the package via Composer.
+
+## Database Requirements
+
+Laravel Permission supports the following database systems:
+
+- **MySQL** 5.7+
+- **PostgreSQL** 10.0+
+- **SQLite** 3.8.8+
+- **SQL Server** 2017+
+- **MariaDB** 10.2+
+
+<Tip>
+  The package uses standard Laravel migrations, so it works with any database system supported by Laravel.
+</Tip>
+
+### Database Configuration
+
+Ensure your `.env` file has the correct database configuration:
+
+```bash .env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=your_database
+DB_USERNAME=your_username
+DB_PASSWORD=your_password
+```
+
+Test your database connection:
+
+```bash
+php artisan db:show
+```
+
+## Authentication Setup
+
+<Warning>
+  Laravel Permission requires an authentication system to be set up in your application.
+</Warning>
+
+You need a User model with authentication configured. If you haven't set this up yet:
+
+### Laravel Breeze (Recommended for new projects)
+
+```bash
+composer require laravel/breeze --dev
+php artisan breeze:install
+php artisan migrate
+npm install && npm run dev
+```
+
+### Laravel Jetstream
+
+```bash
+composer require laravel/jetstream
+php artisan jetstream:install livewire
+php artisan migrate
+npm install && npm run dev
+```
+
+### Manual Setup
+
+If you prefer a manual setup, ensure you have:
+- A `users` table in your database
+- A `User` model in `app/Models/User.php`
+- Authentication guards configured in `config/auth.php`
+
+## Version Compatibility
+
+Different versions of Laravel Permission support different versions of Laravel and PHP:
+
+| Laravel Permission | Laravel | PHP |
+|-------------------|---------|-----|
+| 7.x | 12.x - 13.x | 8.4+ |
+| 6.x | 11.x | 8.2+ |
+| 5.x | 9.x - 10.x | 8.0+ |
+| 4.x | 8.x | 7.3+ |
+| 3.x | 7.x | 7.2+ |
+
+<Tip>
+  Always use the latest compatible version for the best features and security updates.
+</Tip>
+
+### Installing a Specific Version
+
+To install a specific version for your Laravel installation:
+
+<CodeGroup>
+```bash Laravel 12-13 (Latest)
+composer require spatie/laravel-permission
+```
+
+```bash Laravel 11
+composer require spatie/laravel-permission:^6.0
+```
+
+```bash Laravel 9-10
+composer require spatie/laravel-permission:^5.0
+```
+</CodeGroup>
+
+## Development Environment
+
+For the best development experience, we recommend:
+
+### Local Development Tools
+
+<CardGroup cols={2}>
+  <Card title="Laravel Herd" icon="rocket" href="https://herd.laravel.com">
+    The fastest way to run Laravel on macOS
+  </Card>
+  <Card title="Laravel Valet" icon="wine-glass" href="https://laravel.com/docs/valet">
+    Lightweight development environment for macOS
+  </Card>
+  <Card title="Laravel Sail" icon="sailboat" href="https://laravel.com/docs/sail">
+    Docker-powered development environment
+  </Card>
+  <Card title="Homestead" icon="home" href="https://laravel.com/docs/homestead">
+    Pre-packaged Vagrant development environment
+  </Card>
+</CardGroup>
+
+### Recommended Tools
+
+- **Composer** 2.x - PHP dependency manager
+- **Git** - Version control
+- **IDE/Editor** - PhpStorm, VS Code, or Sublime Text with PHP extensions
+
+## Optional Dependencies
+
+### Laravel Passport (for API Authentication)
+
+If you're using Laravel Passport for API authentication:
+
+```bash
+composer require laravel/passport
+```
+
+Enable Passport client credentials in the config:
+
+```php config/permission.php
+'use_passport_client_credentials' => true,
+```
+
+### Laravel Octane (for High Performance)
+
+If you're using Laravel Octane, enable the reset listener:
+
+```php config/permission.php
+'register_octane_reset_listener' => true,
+```
+
+## Composer Configuration
+
+Ensure your `composer.json` has the correct minimum stability:
+
+```json composer.json
+{
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
+```
+
+This ensures you get stable releases while allowing dev dependencies.
+
+## Checking Your Environment
+
+Here's a quick checklist to verify your environment is ready:
+
+<Steps>
+  <Step title="Check PHP Version">
+    ```bash
+    php --version
+    ```
+    Should show PHP 8.4.0 or higher.
+  </Step>
+
+  <Step title="Check Laravel Version">
+    ```bash
+    php artisan --version
+    ```
+    Should show Laravel Framework 12.x.x or 13.x.x.
+  </Step>
+
+  <Step title="Check Database Connection">
+    ```bash
+    php artisan db:show
+    ```
+    Should display your database information without errors.
+  </Step>
+
+  <Step title="Check Composer">
+    ```bash
+    composer --version
+    ```
+    Should show Composer 2.x.x.
+  </Step>
+
+  <Step title="Verify Authentication">
+    ```bash
+    php artisan route:list --path=login
+    ```
+    Should show authentication routes if auth is set up.
+  </Step>
+</Steps>
+
+## Common Issues
+
+<AccordionGroup>
+  <Accordion title="PHP version too old">
+    **Error:** `requires php ^8.4`
+    
+    **Solution:** Upgrade your PHP version to 8.4 or higher. On Ubuntu/Debian:
+    
+    ```bash
+    sudo add-apt-repository ppa:ondrej/php
+    sudo apt update
+    sudo apt install php8.4
+    ```
+  </Accordion>
+
+  <Accordion title="Laravel version incompatible">
+    **Error:** `laravel/framework[v11.x] require spatie/laravel-permission ^6.0`
+    
+    **Solution:** Install the correct package version for your Laravel version:
+    
+    ```bash
+    composer require spatie/laravel-permission:^6.0
+    ```
+  </Accordion>
+
+  <Accordion title="Missing authentication">
+    **Error:** User model not found or authentication not configured
+    
+    **Solution:** Install Laravel Breeze or set up authentication:
+    
+    ```bash
+    composer require laravel/breeze --dev
+    php artisan breeze:install
+    ```
+  </Accordion>
+
+  <Accordion title="Database connection failed">
+    **Error:** Database connection errors during installation
+    
+    **Solution:** Verify your `.env` database credentials and ensure the database exists:
+    
+    ```bash
+    mysql -u root -p
+    CREATE DATABASE your_database;
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+Once you've verified all prerequisites are met:
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install Laravel Permission in your application
+  </Card>
+  <Card title="Basic Concepts" icon="book" href="/basic-concepts">
+    Learn about roles and permissions
+  </Card>
+</CardGroup>

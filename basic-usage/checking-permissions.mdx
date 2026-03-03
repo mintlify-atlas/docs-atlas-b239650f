@@ -1,0 +1,450 @@
+---
+title: 'Checking Permissions'
+description: 'Learn how to check if users have specific permissions and roles'
+---
+
+Laravel Permission provides multiple methods to check if a user has specific permissions or roles. These checks work seamlessly with both direct permissions and permissions inherited through roles.
+
+## Checking Permissions
+
+Verify if a user has specific permissions.
+
+<Tabs>
+  <Tab title="hasPermissionTo()">
+    Check if a user has a specific permission:
+
+    ```php
+    $user = User::find(1);
+
+    // Check by permission name
+    if ($user->hasPermissionTo('edit articles')) {
+        // User has the permission
+    }
+
+    // Check with specific guard
+    if ($user->hasPermissionTo('edit articles', 'api')) {
+        // User has the permission on api guard
+    }
+
+    // Using Permission model
+    $permission = Permission::findByName('edit articles');
+    if ($user->hasPermissionTo($permission)) {
+        // User has the permission
+    }
+    ```
+
+    <Warning>
+      Throws `PermissionDoesNotExist` exception if the permission doesn't exist in the database.
+    </Warning>
+  </Tab>
+
+  <Tab title="checkPermissionTo()">
+    Safe version that doesn't throw exceptions:
+
+    ```php
+    // Returns false if permission doesn't exist
+    if ($user->checkPermissionTo('edit articles')) {
+        // User has the permission
+    }
+
+    // This won't throw an exception even if 'nonexistent' doesn't exist
+    if ($user->checkPermissionTo('nonexistent permission')) {
+        // Will be false
+    }
+    ```
+
+    <Tip>
+      Use `checkPermissionTo()` when you're not sure if the permission exists.
+    </Tip>
+  </Tab>
+
+  <Tab title="can() - Laravel's Native">
+    Laravel's built-in authorization method also works:
+
+    ```php
+    // Laravel automatically registers permissions with the Gate
+    if ($user->can('edit articles')) {
+        // User can edit articles
+    }
+
+    // In controllers
+    $this->authorize('edit articles');
+    ```
+
+    <Note>
+      The package automatically registers all permissions with Laravel's Gate system.
+    </Note>
+  </Tab>
+</Tabs>
+
+## Checking Multiple Permissions
+
+Check if a user has any or all of multiple permissions.
+
+<Tabs>
+  <Tab title="hasAnyPermission()">
+    Check if user has at least one of the given permissions:
+
+    ```php
+    // Returns true if user has ANY of these permissions
+    if ($user->hasAnyPermission(['edit articles', 'delete articles'])) {
+        // User can either edit OR delete articles
+    }
+
+    // Works with variable arguments
+    if ($user->hasAnyPermission('edit articles', 'delete articles')) {
+        // Same as above
+    }
+    ```
+  </Tab>
+
+  <Tab title="hasAllPermissions()">
+    Check if user has all of the given permissions:
+
+    ```php
+    // Returns true only if user has ALL these permissions
+    if ($user->hasAllPermissions(['edit articles', 'publish articles'])) {
+        // User can both edit AND publish articles
+    }
+
+    // Works with variable arguments
+    if ($user->hasAllPermissions('edit articles', 'publish articles')) {
+        // Same as above
+    }
+    ```
+  </Tab>
+
+  <Tab title="canAny() - Laravel Native">
+    Laravel's native method for checking multiple permissions:
+
+    ```php
+    // Check if user can perform any of these actions
+    if ($user->canAny(['edit articles', 'delete articles'])) {
+        // User can edit OR delete
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Checking Direct Permissions
+
+Check only directly assigned permissions, ignoring role permissions.
+
+```php
+// Check if user has direct permission (not via role)
+if ($user->hasDirectPermission('edit articles')) {
+    // User was directly given this permission
+}
+
+// Check multiple direct permissions (any)
+if ($user->hasAnyDirectPermission('edit articles', 'delete articles')) {
+    // User has at least one direct permission
+}
+
+// Check multiple direct permissions (all)
+if ($user->hasAllDirectPermissions('edit articles', 'publish articles')) {
+    // User has all these direct permissions
+}
+```
+
+<Note>
+  These methods check ONLY direct permissions and ignore permissions inherited through roles.
+</Note>
+
+## Checking Roles
+
+Verify if a user has specific roles.
+
+<Tabs>
+  <Tab title="hasRole()">
+    Check if user has a specific role:
+
+    ```php
+    // Check single role (string)
+    if ($user->hasRole('writer')) {
+        // User has the writer role
+    }
+
+    // Check with Role model
+    $role = Role::findByName('writer');
+    if ($user->hasRole($role)) {
+        // User has the role
+    }
+
+    // Check multiple roles (returns true if user has ANY)
+    if ($user->hasRole(['writer', 'editor'])) {
+        // User is either a writer OR editor
+    }
+
+    // Using pipe separator
+    if ($user->hasRole('writer|editor')) {
+        // Same as array
+    }
+    ```
+  </Tab>
+
+  <Tab title="hasAnyRole()">
+    Alias to `hasRole()` for checking multiple roles:
+
+    ```php
+    // More explicit method name
+    if ($user->hasAnyRole('writer', 'editor', 'admin')) {
+        // User has at least one of these roles
+    }
+
+    if ($user->hasAnyRole(['writer', 'editor', 'admin'])) {
+        // Same as above
+    }
+    ```
+  </Tab>
+
+  <Tab title="hasAllRoles()">
+    Check if user has all specified roles:
+
+    ```php
+    // Returns true only if user has ALL roles
+    if ($user->hasAllRoles(['writer', 'reviewer'])) {
+        // User is both a writer AND reviewer
+    }
+
+    // With specific guard
+    if ($user->hasAllRoles(['writer', 'reviewer'], 'api')) {
+        // Check on specific guard
+    }
+    ```
+  </Tab>
+
+  <Tab title="hasExactRoles()">
+    Check if user has exactly these roles (no more, no less):
+
+    ```php
+    // Returns true only if user has EXACTLY these roles
+    if ($user->hasExactRoles(['writer', 'reviewer'])) {
+        // User has exactly these two roles, no others
+    }
+
+    // If user has ['writer', 'reviewer', 'editor'], this returns false
+    // If user has only ['writer'], this also returns false
+    ```
+  </Tab>
+</Tabs>
+
+## Method Signatures
+
+Key method signatures from the source code:
+
+<CodeGroup>
+
+```php HasPermissions Trait
+// Check if has permission (throws exception if not found)
+public function hasPermissionTo(
+    string|int|Permission|BackedEnum $permission, 
+    ?string $guardName = null
+): bool
+
+// Safe check (returns false if not found)
+public function checkPermissionTo(
+    string|int|Permission|BackedEnum $permission, 
+    ?string $guardName = null
+): bool
+
+// Check any permission
+public function hasAnyPermission(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+
+// Check all permissions
+public function hasAllPermissions(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+
+// Check direct permission
+public function hasDirectPermission(
+    string|int|Permission|BackedEnum $permission
+): bool
+```
+
+```php HasRoles Trait
+// Check if has role
+public function hasRole(
+    string|int|array|Role|Collection|BackedEnum $roles, 
+    ?string $guard = null
+): bool
+
+// Check any role (alias)
+public function hasAnyRole(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): bool
+
+// Check all roles
+public function hasAllRoles(
+    string|array|Role|Collection|BackedEnum $roles, 
+    ?string $guard = null
+): bool
+
+// Check exact roles
+public function hasExactRoles(
+    string|array|Role|Collection|BackedEnum $roles, 
+    ?string $guard = null
+): bool
+```
+
+</CodeGroup>
+
+## Understanding Permission Checks
+
+Permission checks follow this logic:
+
+<Steps>
+  <Step title="Direct Permissions First">
+    Check if user has the permission assigned directly:
+
+    ```php
+    $hasDirectPermission = $user->hasDirectPermission('edit articles');
+    ```
+  </Step>
+
+  <Step title="Then Via Roles">
+    If not found directly, check if user has it through any role:
+
+    ```php
+    $hasViaRole = $user->hasPermissionViaRole($permission);
+    ```
+  </Step>
+
+  <Step title="Combined Result">
+    The permission is granted if found in either source:
+
+    ```php
+    // Internal logic of hasPermissionTo()
+    return $this->hasDirectPermission($permission) 
+        || $this->hasPermissionViaRole($permission);
+    ```
+  </Step>
+</Steps>
+
+## Using in Controllers
+
+Common patterns for checking permissions in controllers:
+
+<Tabs>
+  <Tab title="Manual Checks">
+    ```php
+    namespace App\Http\Controllers;
+
+    class ArticleController extends Controller
+    {
+        public function edit(Article $article)
+        {
+            if (! auth()->user()->can('edit articles')) {
+                abort(403);
+            }
+
+            return view('articles.edit', compact('article'));
+        }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Using authorize()">
+    ```php
+    public function edit(Article $article)
+    {
+        // Throws 403 if user doesn't have permission
+        $this->authorize('edit articles');
+
+        return view('articles.edit', compact('article'));
+    }
+    ```
+  </Tab>
+
+  <Tab title="Constructor Middleware">
+    ```php
+    class ArticleController extends Controller
+    {
+        public function __construct()
+        {
+            // Check permission for all methods
+            $this->middleware('can:edit articles');
+
+            // Check for specific methods
+            $this->middleware('can:delete articles')->only('destroy');
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Wildcard Permissions
+
+If wildcard permissions are enabled, you can use pattern matching:
+
+```php
+// User has permission: 'articles.*'
+$user->givePermissionTo('articles.*');
+
+// These all return true:
+$user->hasPermissionTo('articles.edit');
+$user->hasPermissionTo('articles.delete');
+$user->hasPermissionTo('articles.publish');
+```
+
+<Note>
+  Wildcard permissions must be enabled in the config:
+  
+  ```php
+  'enable_wildcard_permission' => true,
+  ```
+</Note>
+
+## Checking Permissions for Other Users
+
+Check permissions for users other than the authenticated user:
+
+```php
+$user = User::find(5);
+
+// Check this specific user's permissions
+if ($user->hasPermissionTo('edit articles')) {
+    // This user can edit
+}
+
+// Compare with authenticated user
+if (auth()->user()->hasPermissionTo('delete articles') 
+    && !$user->hasPermissionTo('delete articles')) {
+    // I can delete but the other user cannot
+}
+```
+
+## Performance Considerations
+
+<Tip>
+  **Eager Loading**: Load roles and permissions to avoid N+1 queries:
+
+  ```php
+  // Load relationships upfront
+  $users = User::with(['roles', 'permissions'])->get();
+
+  foreach ($users as $user) {
+      // These checks use cached data, no additional queries
+      if ($user->hasRole('admin')) {
+          // ...
+      }
+  }
+  ```
+</Tip>
+
+<Note>
+  **Caching**: The package caches permissions automatically. Permissions are only queried once per request and stored in the cache.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Blade Directives" icon="code" href="/basic-usage/using-blade-directives">
+    Use permission checks in Blade templates
+  </Card>
+  <Card title="Middleware" icon="shield" href="/basic-usage/using-middleware">
+    Protect routes with middleware
+  </Card>
+</CardGroup>

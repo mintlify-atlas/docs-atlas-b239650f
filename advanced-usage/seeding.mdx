@@ -1,0 +1,597 @@
+---
+title: 'Seeding Roles & Permissions'
+description: 'Best practices for seeding permissions and roles in your database'
+icon: 'seedling'
+---
+
+Seeding roles and permissions is essential for setting up your application's authorization structure. This guide shows you how to create seeders efficiently.
+
+## Basic Seeder Structure
+
+Create a seeder using Artisan:
+
+```bash
+php artisan make:seeder RoleAndPermissionSeeder
+```
+
+### Simple Seeder Example
+
+```php database/seeders/RoleAndPermissionSeeder.php
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+class RoleAndPermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Reset cached roles and permissions
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Create permissions
+        Permission::create(['name' => 'view posts']);
+        Permission::create(['name' => 'create posts']);
+        Permission::create(['name' => 'edit posts']);
+        Permission::create(['name' => 'delete posts']);
+
+        // Create roles and assign permissions
+        $role = Role::create(['name' => 'writer']);
+        $role->givePermissionTo(['view posts', 'create posts', 'edit posts']);
+
+        $role = Role::create(['name' => 'admin']);
+        $role->givePermissionTo(Permission::all());
+    }
+}
+```
+
+## Best Practices
+
+### 1. Reset Cache Before Seeding
+
+<Note>
+  Always reset the permission cache at the start of your seeder to avoid stale data.
+</Note>
+
+```php
+public function run(): void
+{
+    // Reset cached roles and permissions
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    
+    // Your seeder logic...
+}
+```
+
+### 2. Use findOrCreate for Idempotent Seeders
+
+Make your seeders idempotent (can run multiple times safely):
+
+```php
+public function run(): void
+{
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+    // Use findOrCreate instead of create
+    $viewPosts = Permission::findOrCreate('view posts');
+    $editPosts = Permission::findOrCreate('edit posts');
+    $deletePosts = Permission::findOrCreate('delete posts');
+
+    $admin = Role::findOrCreate('admin');
+    $admin->syncPermissions([$viewPosts, $editPosts, $deletePosts]);
+}
+```
+
+### 3. Organize by Resource
+
+Structure permissions logically by resource:
+
+```php
+public function run(): void
+{
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+    // Posts permissions
+    $postPermissions = [
+        'view posts',
+        'create posts',
+        'edit posts',
+        'delete posts',
+    ];
+
+    // User permissions
+    $userPermissions = [
+        'view users',
+        'create users',
+        'edit users',
+        'delete users',
+    ];
+
+    // Create all permissions
+    foreach (array_merge($postPermissions, $userPermissions) as $permission) {
+        Permission::findOrCreate($permission);
+    }
+
+    // Assign to roles
+    Role::findOrCreate('editor')->syncPermissions($postPermissions);
+    Role::findOrCreate('admin')->syncPermissions(Permission::all());
+}
+```
+
+## Advanced Seeder Patterns
+
+### Structured Permissions Array
+
+```php database/seeders/RoleAndPermissionSeeder.php
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+class RoleAndPermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        $permissions = [
+            'posts' => ['view', 'create', 'edit', 'delete', 'publish'],
+            'comments' => ['view', 'create', 'edit', 'delete', 'moderate'],
+            'users' => ['view', 'create', 'edit', 'delete', 'ban'],
+            'settings' => ['view', 'edit'],
+        ];
+
+        // Create permissions
+        foreach ($permissions as $resource => $actions) {
+            foreach ($actions as $action) {
+                Permission::findOrCreate("{$action} {$resource}");
+            }
+        }
+
+        // Define role permissions
+        $rolePermissions = [
+            'super-admin' => Permission::all(),
+            'admin' => Permission::whereIn('name', [
+                'view posts', 'create posts', 'edit posts', 'delete posts',
+                'view users', 'edit users',
+                'view comments', 'moderate comments',
+            ])->get(),
+            'editor' => Permission::whereIn('name', [
+                'view posts', 'create posts', 'edit posts', 'publish posts',
+                'view comments', 'moderate comments',
+            ])->get(),
+            'writer' => Permission::whereIn('name', [
+                'view posts', 'create posts', 'edit posts',
+            ])->get(),
+        ];
+
+        // Create roles and assign permissions
+        foreach ($rolePermissions as $roleName => $permissions) {
+            $role = Role::findOrCreate($roleName);
+            $role->syncPermissions($permissions);
+        }
+    }
+}
+```
+
+### CRUD Pattern Helper
+
+```php database/seeders/RoleAndPermissionSeeder.php
+class RoleAndPermissionSeeder extends Seeder
+{
+    private function createCrudPermissions(string $resource): array
+    {
+        $actions = ['view', 'create', 'edit', 'delete'];
+        $permissions = [];
+
+        foreach ($actions as $action) {
+            $permissions[] = Permission::findOrCreate("{$action} {$resource}");
+        }
+
+        return $permissions;
+    }
+
+    public function run(): void
+    {
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Create CRUD permissions for multiple resources
+        $postPermissions = $this->createCrudPermissions('posts');
+        $userPermissions = $this->createCrudPermissions('users');
+        $commentPermissions = $this->createCrudPermissions('comments');
+
+        // Create roles
+        Role::findOrCreate('admin')->syncPermissions(Permission::all());
+        Role::findOrCreate('editor')->syncPermissions(array_merge(
+            $postPermissions,
+            $commentPermissions
+        ));
+    }
+}
+```
+
+## Seeding with Guards
+
+When using multiple guards, specify the guard for each permission:
+
+```php
+public function run(): void
+{
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+    // Web guard permissions
+    Permission::findOrCreate('view dashboard', 'web');
+    Permission::findOrCreate('edit profile', 'web');
+
+    // Admin guard permissions
+    Permission::findOrCreate('manage users', 'admin');
+    Permission::findOrCreate('view logs', 'admin');
+
+    // API guard permissions
+    Permission::findOrCreate('access api', 'api');
+    Permission::findOrCreate('write api', 'api');
+
+    // Create roles with guards
+    $webAdmin = Role::findOrCreate('admin', 'web');
+    $webAdmin->givePermissionTo(['view dashboard', 'edit profile']);
+
+    $superAdmin = Role::findOrCreate('super-admin', 'admin');
+    $superAdmin->givePermissionTo(['manage users', 'view logs']);
+}
+```
+
+## Seeding with Teams
+
+For multi-tenant applications using teams:
+
+```php
+public function run(): void
+{
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+    // Create permissions (not team-specific)
+    Permission::findOrCreate('edit posts');
+    Permission::findOrCreate('delete posts');
+    Permission::findOrCreate('manage team');
+
+    // Create global roles (available to all teams)
+    $superAdmin = Role::create([
+        'name' => 'super-admin',
+        'team_id' => null, // Global role
+    ]);
+    $superAdmin->givePermissionTo(Permission::all());
+
+    // Create team-specific roles
+    $teams = \App\Models\Team::all();
+    
+    foreach ($teams as $team) {
+        setPermissionsTeamId($team->id);
+        
+        $admin = Role::create([
+            'name' => 'admin',
+            'team_id' => $team->id,
+        ]);
+        $admin->givePermissionTo(['edit posts', 'delete posts', 'manage team']);
+        
+        $editor = Role::create([
+            'name' => 'editor',
+            'team_id' => $team->id,
+        ]);
+        $editor->givePermissionTo(['edit posts']);
+    }
+    
+    // Reset team context
+    setPermissionsTeamId(null);
+}
+```
+
+## Assigning Roles to Users
+
+```php database/seeders/UserSeeder.php
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
+
+class UserSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Create admin user
+        $admin = User::create([
+            'name' => 'Admin User',
+            'email' => 'admin@example.com',
+            'password' => bcrypt('password'),
+        ]);
+        $admin->assignRole('super-admin');
+
+        // Create editor users
+        User::factory()
+            ->count(5)
+            ->create()
+            ->each(fn ($user) => $user->assignRole('editor'));
+
+        // Create writer users
+        User::factory()
+            ->count(10)
+            ->create()
+            ->each(fn ($user) => $user->assignRole('writer'));
+    }
+}
+```
+
+## Wildcard Permissions
+
+If using wildcard permissions, create them in your seeder:
+
+```php
+public function run(): void
+{
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+    // Create specific permissions
+    Permission::findOrCreate('posts.view');
+    Permission::findOrCreate('posts.create');
+    Permission::findOrCreate('posts.edit');
+    Permission::findOrCreate('posts.delete');
+
+    // Create wildcard permissions
+    Permission::findOrCreate('posts.*');
+    Permission::findOrCreate('admin.*');
+    Permission::findOrCreate('*.*'); // Super permission
+
+    // Assign wildcards to roles
+    Role::findOrCreate('admin')->givePermissionTo('admin.*');
+    Role::findOrCreate('super-admin')->givePermissionTo('*.*');
+}
+```
+
+## Running Seeders
+
+### Run Specific Seeder
+
+```bash
+php artisan db:seed --class=RoleAndPermissionSeeder
+```
+
+### Add to DatabaseSeeder
+
+```php database/seeders/DatabaseSeeder.php
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+
+class DatabaseSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $this->call([
+            RoleAndPermissionSeeder::class,
+            UserSeeder::class,
+        ]);
+    }
+}
+```
+
+Then run:
+
+```bash
+php artisan db:seed
+```
+
+### Fresh Migration with Seed
+
+```bash
+php artisan migrate:fresh --seed
+```
+
+## Performance Tips
+
+<Accordion title="Disable Events During Seeding">
+  Events can slow down bulk operations:
+
+  ```php
+  public function run(): void
+  {
+      // Disable events
+      config(['permission.events_enabled' => false]);
+      
+      app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+      
+      // Your seeding logic...
+      
+      // Re-enable if needed
+      config(['permission.events_enabled' => true]);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Use Bulk Inserts for Large Datasets">
+  For hundreds of permissions, use database bulk inserts:
+
+  ```php
+  use Illuminate\Support\Facades\DB;
+  
+  public function run(): void
+  {
+      app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+      
+      $permissions = [];
+      $timestamp = now();
+      
+      foreach (['posts', 'users', 'comments'] as $resource) {
+          foreach (['view', 'create', 'edit', 'delete'] as $action) {
+              $permissions[] = [
+                  'name' => "{$action} {$resource}",
+                  'guard_name' => 'web',
+                  'created_at' => $timestamp,
+                  'updated_at' => $timestamp,
+              ];
+          }
+      }
+      
+      DB::table('permissions')->insertOrIgnore($permissions);
+  }
+  ```
+</Accordion>
+
+<Accordion title="Cache Warming">
+  Warm up the cache after seeding:
+
+  ```php
+  public function run(): void
+  {
+      app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+      
+      // Your seeding logic...
+      
+      // Warm up cache
+      Permission::all(); // Triggers cache build
+  }
+  ```
+</Accordion>
+
+## Testing Your Seeders
+
+```php tests/Feature/RoleSeederTest.php
+namespace Tests\Feature;
+
+use Database\Seeders\RoleAndPermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Tests\TestCase;
+
+class RoleSeederTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_seeder_creates_all_roles(): void
+    {
+        $this->seed(RoleAndPermissionSeeder::class);
+
+        $this->assertDatabaseHas('roles', ['name' => 'admin']);
+        $this->assertDatabaseHas('roles', ['name' => 'editor']);
+        $this->assertDatabaseHas('roles', ['name' => 'writer']);
+    }
+
+    public function test_admin_has_all_permissions(): void
+    {
+        $this->seed(RoleAndPermissionSeeder::class);
+
+        $admin = Role::findByName('admin');
+        $permissionCount = Permission::count();
+
+        $this->assertCount($permissionCount, $admin->permissions);
+    }
+
+    public function test_seeder_is_idempotent(): void
+    {
+        $this->seed(RoleAndPermissionSeeder::class);
+        $firstCount = Role::count();
+
+        // Run again
+        $this->seed(RoleAndPermissionSeeder::class);
+        $secondCount = Role::count();
+
+        $this->assertEquals($firstCount, $secondCount);
+    }
+}
+```
+
+## Common Patterns
+
+<Steps>
+  <Step title="Define Permission Structure">
+    Create a clear structure for your permissions, organized by resource and action.
+  </Step>
+  
+  <Step title="Create Permissions">
+    Use `findOrCreate()` to make seeders idempotent.
+  </Step>
+  
+  <Step title="Create Roles">
+    Define roles based on your application's user types.
+  </Step>
+  
+  <Step title="Assign Permissions to Roles">
+    Use `syncPermissions()` to assign permissions to roles.
+  </Step>
+  
+  <Step title="Assign Roles to Users">
+    Create initial admin users with appropriate roles.
+  </Step>
+</Steps>
+
+## Example: Complete Seeder
+
+```php database/seeders/RoleAndPermissionSeeder.php
+namespace Database\Seeders;
+
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+class RoleAndPermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Reset cached roles and permissions
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Define permissions by resource
+        $resources = [
+            'posts' => ['view', 'create', 'edit', 'delete', 'publish'],
+            'comments' => ['view', 'create', 'edit', 'delete', 'approve'],
+            'users' => ['view', 'create', 'edit', 'delete'],
+            'roles' => ['view', 'create', 'edit', 'delete'],
+            'settings' => ['view', 'edit'],
+        ];
+
+        // Create all permissions
+        $allPermissions = [];
+        foreach ($resources as $resource => $actions) {
+            foreach ($actions as $action) {
+                $permission = Permission::findOrCreate("{$action} {$resource}");
+                $allPermissions[] = $permission;
+            }
+        }
+
+        // Create roles with specific permissions
+        Role::findOrCreate('super-admin')
+            ->syncPermissions($allPermissions);
+
+        Role::findOrCreate('admin')
+            ->syncPermissions([
+                'view posts', 'create posts', 'edit posts', 'delete posts',
+                'view users', 'create users', 'edit users',
+                'view comments', 'approve comments',
+            ]);
+
+        Role::findOrCreate('editor')
+            ->syncPermissions([
+                'view posts', 'create posts', 'edit posts', 'publish posts',
+                'view comments', 'edit comments',
+            ]);
+
+        Role::findOrCreate('writer')
+            ->syncPermissions([
+                'view posts', 'create posts', 'edit posts',
+            ]);
+
+        // Create initial admin user
+        $admin = User::firstOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name' => 'Super Admin',
+                'password' => bcrypt('password'),
+            ]
+        );
+        $admin->assignRole('super-admin');
+    }
+}
+```

@@ -1,0 +1,345 @@
+---
+title: Installation
+description: Install Laravel Permission and set up your database
+---
+
+## Installation Steps
+
+Follow these steps to install and configure Laravel Permission in your application.
+
+<Steps>
+  <Step title="Install the Package">
+    Install the package via Composer:
+    
+    ```bash
+    composer require spatie/laravel-permission
+    ```
+    
+    The package will automatically register its service provider.
+    
+    <Tip>
+      Make sure you meet the [prerequisites](/prerequisites) before installing.
+    </Tip>
+  </Step>
+
+  <Step title="Publish the Configuration">
+    Publish the configuration file and migrations:
+    
+    ```bash
+    php artisan vendor:publish --provider="Spatie\Permission\PermissionServiceProvider"
+    ```
+    
+    This will create:
+    - `config/permission.php` - Configuration file
+    - Database migration files in `database/migrations/`
+    
+    <Info>
+      You can customize table names, models, and other settings in the config file.
+    </Info>
+  </Step>
+
+  <Step title="Run the Migrations">
+    Run the migrations to create the necessary database tables:
+    
+    ```bash
+    php artisan migrate
+    ```
+    
+    This creates the following tables:
+    - `permissions` - Stores all permissions
+    - `roles` - Stores all roles
+    - `model_has_permissions` - Pivot table for direct user permissions
+    - `model_has_roles` - Pivot table for user roles
+    - `role_has_permissions` - Pivot table for role permissions
+  </Step>
+
+  <Step title="Add the Trait to Your User Model">
+    Add the `HasRoles` trait to your User model:
+    
+    ```php app/Models/User.php
+    <?php
+
+    namespace App\Models;
+
+    use Illuminate\Foundation\Auth\User as Authenticatable;
+    use Spatie\Permission\Traits\HasRoles;
+
+    class User extends Authenticatable
+    {
+        use HasRoles;
+
+        // ... rest of your User model
+    }
+    ```
+    
+    <Note>
+      The `HasRoles` trait also includes the `HasPermissions` trait, giving you access to all permission methods.
+    </Note>
+  </Step>
+
+  <Step title="Clear Cache">
+    Clear your application cache to ensure the package is properly loaded:
+    
+    ```bash
+    php artisan optimize:clear
+    ```
+    
+    Or clear individual caches:
+    
+    ```bash
+    php artisan config:clear
+    php artisan cache:clear
+    ```
+  </Step>
+</Steps>
+
+## Verify Installation
+
+You can verify the installation by creating a permission:
+
+<CodeGroup>
+```php Tinker
+php artisan tinker
+
+>>> use Spatie\Permission\Models\Permission;
+>>> Permission::create(['name' => 'edit articles']);
+>>> Permission::all();
+```
+
+```php Controller
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+public function test()
+{
+    // Create a permission
+    Permission::create(['name' => 'edit articles']);
+    
+    // Create a role
+    $role = Role::create(['name' => 'writer']);
+    $role->givePermissionTo('edit articles');
+    
+    return 'Installation successful!';
+}
+```
+</CodeGroup>
+
+## Database Schema
+
+Here's an overview of the tables created by the migrations:
+
+### permissions
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | bigint | Primary key |
+| name | varchar | Permission name (e.g., 'edit articles') |
+| guard_name | varchar | Guard name (e.g., 'web', 'api') |
+| created_at | timestamp | Creation timestamp |
+| updated_at | timestamp | Update timestamp |
+
+### roles
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | bigint | Primary key |
+| name | varchar | Role name (e.g., 'writer', 'admin') |
+| guard_name | varchar | Guard name (e.g., 'web', 'api') |
+| created_at | timestamp | Creation timestamp |
+| updated_at | timestamp | Update timestamp |
+
+### model_has_permissions
+
+| Column | Type | Description |
+|--------|------|-------------|
+| permission_id | bigint | Foreign key to permissions |
+| model_type | varchar | Model class name |
+| model_id | bigint | Model ID |
+
+### model_has_roles
+
+| Column | Type | Description |
+|--------|------|-------------|
+| role_id | bigint | Foreign key to roles |
+| model_type | varchar | Model class name |
+| model_id | bigint | Model ID |
+
+### role_has_permissions
+
+| Column | Type | Description |
+|--------|------|-------------|
+| permission_id | bigint | Foreign key to permissions |
+| role_id | bigint | Foreign key to roles |
+
+## Configuration
+
+The `config/permission.php` file contains all configuration options. Here are some key settings:
+
+<AccordionGroup>
+  <Accordion title="Models Configuration">
+    Customize which Eloquent models are used for permissions and roles:
+    
+    ```php config/permission.php
+    'models' => [
+        'permission' => Spatie\Permission\Models\Permission::class,
+        'role' => Spatie\Permission\Models\Role::class,
+    ],
+    ```
+    
+    You can extend these models with your own custom models.
+  </Accordion>
+
+  <Accordion title="Table Names">
+    Customize the database table names:
+    
+    ```php config/permission.php
+    'table_names' => [
+        'roles' => 'roles',
+        'permissions' => 'permissions',
+        'model_has_permissions' => 'model_has_permissions',
+        'model_has_roles' => 'model_has_roles',
+        'role_has_permissions' => 'role_has_permissions',
+    ],
+    ```
+  </Accordion>
+
+  <Accordion title="Cache Settings">
+    Configure permission caching:
+    
+    ```php config/permission.php
+    'cache' => [
+        'expiration_time' => \DateInterval::createFromDateString('24 hours'),
+        'key' => 'spatie.permission.cache',
+        'store' => 'default',
+    ],
+    ```
+    
+    Caching significantly improves performance by reducing database queries.
+  </Accordion>
+
+  <Accordion title="Teams Feature">
+    Enable multi-tenancy support:
+    
+    ```php config/permission.php
+    'teams' => false, // Set to true to enable teams
+    'team_foreign_key' => 'team_id',
+    ```
+    
+    <Warning>
+      You must set `teams` to `true` **before** running migrations if you want team support.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Wildcard Permissions">
+    Enable wildcard permission matching:
+    
+    ```php config/permission.php
+    'enable_wildcard_permission' => false,
+    ```
+    
+    When enabled, you can use patterns like `articles.*` to match multiple permissions.
+  </Accordion>
+</AccordionGroup>
+
+## Seed Sample Data
+
+It's a good practice to seed your database with initial roles and permissions:
+
+```php database/seeders/PermissionSeeder.php
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+class PermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Reset cached roles and permissions
+        app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+
+        // Create permissions
+        Permission::create(['name' => 'edit articles']);
+        Permission::create(['name' => 'delete articles']);
+        Permission::create(['name' => 'publish articles']);
+        Permission::create(['name' => 'unpublish articles']);
+
+        // Create roles and assign permissions
+        $role = Role::create(['name' => 'writer']);
+        $role->givePermissionTo(['edit articles', 'delete articles']);
+
+        $role = Role::create(['name' => 'editor']);
+        $role->givePermissionTo(['edit articles', 'delete articles', 'publish articles', 'unpublish articles']);
+
+        $role = Role::create(['name' => 'admin']);
+        $role->givePermissionTo(Permission::all());
+    }
+}
+```
+
+Run the seeder:
+
+```bash
+php artisan db:seed --class=PermissionSeeder
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Table 'permissions' doesn't exist">
+    Make sure you've run the migrations:
+    
+    ```bash
+    php artisan migrate
+    ```
+    
+    If you've published the migrations but they're not running, check that the migration files exist in `database/migrations/`.
+  </Accordion>
+
+  <Accordion title="Trait 'HasRoles' not found">
+    Clear your autoload cache:
+    
+    ```bash
+    composer dump-autoload
+    php artisan optimize:clear
+    ```
+  </Accordion>
+
+  <Accordion title="Permissions not working after changes">
+    Clear the permission cache:
+    
+    ```bash
+    php artisan cache:forget spatie.permission.cache
+    ```
+    
+    Or in code:
+    
+    ```php
+    app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+    ```
+  </Accordion>
+
+  <Accordion title="Using UUID primary keys">
+    If your User model uses UUIDs, update the column configuration:
+    
+    ```php config/permission.php
+    'column_names' => [
+        'model_morph_key' => 'model_uuid',
+    ],
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic Concepts" icon="book" href="/basic-concepts">
+    Learn about roles, permissions, and guards
+  </Card>
+  <Card title="Using Permissions" icon="code" href="/basic-usage/using-permissions">
+    Start using roles and permissions in your app
+  </Card>
+</CardGroup>

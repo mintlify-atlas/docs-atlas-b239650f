@@ -1,0 +1,784 @@
+---
+title: 'HasPermissions Trait'
+description: 'Complete API reference for the HasPermissions trait'
+---
+
+The `HasPermissions` trait provides direct permission management functionality to your models. This trait is included within the `HasRoles` trait and allows models to have permissions both directly and through roles.
+
+## Namespace
+
+```php
+Spatie\Permission\Traits\HasPermissions
+```
+
+## Relationships
+
+### permissions()
+
+Define the many-to-many relationship between the model and permissions.
+
+```php
+public function permissions(): BelongsToMany
+```
+
+**Returns:** `Illuminate\Database\Eloquent\Relations\BelongsToMany`
+
+**Description:** Returns the eloquent relationship for direct permissions. Automatically handles team-based permissions if enabled.
+
+**Example:**
+```php
+$user->permissions; // Collection of direct permissions
+$user->permissions()->where('name', 'edit articles')->first();
+```
+
+---
+
+## Query Scopes
+
+### scopePermission()
+
+Scope the model query to certain permissions only.
+
+```php
+public function scopePermission(
+    Builder $query,
+    string|int|array|Permission|Collection|BackedEnum $permissions,
+    bool $without = false
+): Builder
+```
+
+<ParamField path="query" type="Builder" required>
+  The query builder instance
+</ParamField>
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to filter by. Can be:
+  - Permission name (string)
+  - Permission ID (int)
+  - Permission model instance
+  - Array of any of the above
+  - Collection of permissions
+  - BackedEnum
+</ParamField>
+
+<ParamField path="without" type="bool" default="false">
+  If true, returns models WITHOUT the specified permissions
+</ParamField>
+
+**Returns:** `Illuminate\Database\Eloquent\Builder`
+
+**Description:** Filters models by permissions, checking both direct permissions and permissions via roles.
+
+**Example:**
+```php
+// Get users with 'edit articles' permission
+$users = User::permission('edit articles')->get();
+
+// Get users with multiple permissions (has ANY of them)
+$users = User::permission(['edit articles', 'delete articles'])->get();
+
+// Get users with permission by ID
+$users = User::permission(1)->get();
+```
+
+---
+
+### scopeWithoutPermission()
+
+Scope the model query to only those without certain permissions, whether indirectly by role or by direct permission.
+
+```php
+public function scopeWithoutPermission(
+    Builder $query,
+    string|int|array|Permission|Collection|BackedEnum $permissions
+): Builder
+```
+
+<ParamField path="query" type="Builder" required>
+  The query builder instance
+</ParamField>
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to exclude
+</ParamField>
+
+**Returns:** `Illuminate\Database\Eloquent\Builder`
+
+**Example:**
+```php
+// Get users without delete permission
+$users = User::withoutPermission('delete articles')->get();
+
+// Get users without multiple permissions
+$users = User::withoutPermission(['delete articles', 'delete users'])->get();
+```
+
+---
+
+## Permission Assignment
+
+### givePermissionTo()
+
+Grant the given permission(s) to the model.
+
+```php
+public function givePermissionTo(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): static
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to grant. Accepts variadic arguments. Can be:
+  - Permission name (string)
+  - Permission ID (int)
+  - Permission model instance
+  - Array of any of the above
+  - Collection of permissions
+  - BackedEnum
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Events:** Fires `PermissionAttachedEvent` if events are enabled
+
+**Example:**
+```php
+// Give single permission
+$user->givePermissionTo('edit articles');
+
+// Give multiple permissions
+$user->givePermissionTo('edit articles', 'delete articles');
+$user->givePermissionTo(['edit articles', 'delete articles']);
+
+// Give permission by ID
+$user->givePermissionTo(1);
+
+// Give permission model
+$permission = Permission::findByName('edit articles');
+$user->givePermissionTo($permission);
+
+// Method chaining
+$user->givePermissionTo('edit articles')->save();
+```
+
+---
+
+### revokePermissionTo()
+
+Revoke the given permission(s) from the model.
+
+```php
+public function revokePermissionTo(
+    Permission|Permission[]|string|string[]|BackedEnum $permission
+): static
+```
+
+<ParamField path="permission" type="Permission|Permission[]|string|string[]|BackedEnum" required>
+  The permission(s) to revoke. Can be:
+  - Permission name (string)
+  - Permission model instance
+  - Array of permission names or models
+  - BackedEnum
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Events:** Fires `PermissionDetachedEvent` if events are enabled
+
+**Example:**
+```php
+// Revoke single permission
+$user->revokePermissionTo('edit articles');
+
+// Revoke multiple permissions
+$user->revokePermissionTo(['edit articles', 'delete articles']);
+
+// Revoke permission by model
+$permission = Permission::findByName('edit articles');
+$user->revokePermissionTo($permission);
+```
+
+---
+
+### syncPermissions()
+
+Remove all current permissions and set the given ones.
+
+```php
+public function syncPermissions(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): static
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to sync. All existing permissions will be removed first. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Example:**
+```php
+// Replace all permissions with 'edit articles'
+$user->syncPermissions('edit articles');
+
+// Replace all permissions with multiple permissions
+$user->syncPermissions(['edit articles', 'delete articles']);
+$user->syncPermissions('edit articles', 'delete articles');
+
+// Remove all permissions
+$user->syncPermissions([]);
+```
+
+---
+
+## Permission Checking
+
+### hasPermissionTo()
+
+Determine if the model may perform the given permission. Checks both direct permissions and permissions via roles.
+
+```php
+public function hasPermissionTo(
+    string|int|Permission|BackedEnum $permission,
+    ?string $guardName = null
+): bool
+```
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check. Can be:
+  - Permission name (string)
+  - Permission ID (int)
+  - Permission model instance
+  - BackedEnum
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name to check against
+</ParamField>
+
+**Returns:** `bool` - Returns `true` if the model has the permission (directly or via role)
+
+**Throws:** `PermissionDoesNotExist` if the permission doesn't exist
+
+**Example:**
+```php
+// Check by permission name
+if ($user->hasPermissionTo('edit articles')) {
+    // User can edit articles
+}
+
+// Check by permission ID
+if ($user->hasPermissionTo(1)) {
+    // User has permission with ID 1
+}
+
+// Check with specific guard
+if ($user->hasPermissionTo('edit articles', 'api')) {
+    // User has permission in api guard
+}
+
+// Works with wildcard permissions (if enabled)
+if ($user->hasPermissionTo('articles.edit')) {
+    // Checks wildcard permission
+}
+```
+
+---
+
+### checkPermissionTo()
+
+An alias to `hasPermissionTo()`, but avoids throwing an exception.
+
+```php
+public function checkPermissionTo(
+    string|int|Permission|BackedEnum $permission,
+    ?string $guardName = null
+): bool
+```
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name to check against
+</ParamField>
+
+**Returns:** `bool` - Returns `false` if permission doesn't exist instead of throwing exception
+
+**Example:**
+```php
+// Safe check that won't throw exception
+if ($user->checkPermissionTo('edit articles')) {
+    // User can edit articles
+}
+
+// Returns false if permission doesn't exist
+if ($user->checkPermissionTo('nonexistent permission')) {
+    // This will return false instead of throwing exception
+}
+```
+
+---
+
+### hasAnyPermission()
+
+Determine if the model has any of the given permissions.
+
+```php
+public function hasAnyPermission(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to check. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `bool` - Returns `true` if the model has ANY of the given permissions
+
+**Example:**
+```php
+// Check if user has any of the permissions
+if ($user->hasAnyPermission('edit articles', 'delete articles')) {
+    // User can either edit or delete articles
+}
+
+// With array
+if ($user->hasAnyPermission(['edit articles', 'delete articles', 'publish articles'])) {
+    // User has at least one of these permissions
+}
+```
+
+---
+
+### hasAllPermissions()
+
+Determine if the model has all of the given permissions.
+
+```php
+public function hasAllPermissions(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to check. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `bool` - Returns `true` only if the model has ALL of the given permissions
+
+**Example:**
+```php
+// Check if user has all permissions
+if ($user->hasAllPermissions('edit articles', 'delete articles')) {
+    // User can both edit AND delete articles
+}
+
+// With array
+if ($user->hasAllPermissions(['edit articles', 'delete articles', 'publish articles'])) {
+    // User has all three permissions
+}
+```
+
+---
+
+### hasDirectPermission()
+
+Determine if the model has the given permission directly assigned (not via role).
+
+```php
+public function hasDirectPermission(
+    string|int|Permission|BackedEnum $permission
+): bool
+```
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to check
+</ParamField>
+
+**Returns:** `bool` - Returns `true` only if permission is directly assigned
+
+**Throws:** `PermissionDoesNotExist` if the permission doesn't exist
+
+**Example:**
+```php
+// Check direct permission only
+if ($user->hasDirectPermission('edit articles')) {
+    // User has this permission directly, not from a role
+}
+```
+
+---
+
+### hasAllDirectPermissions()
+
+Check if the model has all of the requested direct permissions.
+
+```php
+public function hasAllDirectPermissions(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to check. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `bool` - Returns `true` only if all permissions are directly assigned
+
+**Example:**
+```php
+if ($user->hasAllDirectPermissions('edit articles', 'delete articles')) {
+    // User has both permissions directly assigned
+}
+```
+
+---
+
+### hasAnyDirectPermission()
+
+Check if the model has any of the requested direct permissions.
+
+```php
+public function hasAnyDirectPermission(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): bool
+```
+
+<ParamField path="permissions" type="string|int|array|Permission|Collection|BackedEnum" required>
+  The permission(s) to check. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `bool` - Returns `true` if any permission is directly assigned
+
+**Example:**
+```php
+if ($user->hasAnyDirectPermission('edit articles', 'delete articles')) {
+    // User has at least one of these permissions directly assigned
+}
+```
+
+---
+
+## Permission Retrieval
+
+### getAllPermissions()
+
+Return all the permissions the model has, both directly and via roles.
+
+```php
+public function getAllPermissions(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of all permission models
+
+**Example:**
+```php
+$permissions = $user->getAllPermissions();
+
+foreach ($permissions as $permission) {
+    echo $permission->name;
+}
+
+// Check if user has any permissions
+if ($user->getAllPermissions()->isNotEmpty()) {
+    // User has at least one permission
+}
+```
+
+---
+
+### getDirectPermissions()
+
+Return all permissions directly coupled to the model (not via roles).
+
+```php
+public function getDirectPermissions(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of directly assigned permission models
+
+**Example:**
+```php
+$directPermissions = $user->getDirectPermissions();
+
+// Compare direct vs all permissions
+$direct = $user->getDirectPermissions()->count();
+$total = $user->getAllPermissions()->count();
+$viaRoles = $total - $direct;
+```
+
+---
+
+### getPermissionsViaRoles()
+
+Return all the permissions the model has via roles.
+
+```php
+public function getPermissionsViaRoles(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of permission models obtained through roles
+
+**Example:**
+```php
+$rolePermissions = $user->getPermissionsViaRoles();
+
+foreach ($rolePermissions as $permission) {
+    echo "Permission from role: {$permission->name}";
+}
+```
+
+---
+
+### getPermissionNames()
+
+Get a collection of permission names assigned directly to the model.
+
+```php
+public function getPermissionNames(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of permission names (strings)
+
+**Example:**
+```php
+$permissionNames = $user->getPermissionNames();
+// Returns: Collection ['edit articles', 'delete articles']
+
+if ($permissionNames->contains('edit articles')) {
+    // User has edit articles permission
+}
+```
+
+---
+
+## Helper Methods
+
+### getPermissionClass()
+
+Get the fully qualified class name of the permission model.
+
+```php
+public function getPermissionClass(): string
+```
+
+**Returns:** `string` - The permission model class name
+
+**Example:**
+```php
+$permissionClass = $user->getPermissionClass();
+// Returns: "App\\Models\\Permission" or your configured permission model
+```
+
+---
+
+### getWildcardClass()
+
+Get the fully qualified class name of the wildcard permission handler.
+
+```php
+public function getWildcardClass(): string
+```
+
+**Returns:** `string` - The wildcard class name (empty string if wildcard permissions are disabled)
+
+**Throws:** `WildcardPermissionNotImplementsContract` if configured class doesn't implement Wildcard contract
+
+**Example:**
+```php
+if ($user->getWildcardClass()) {
+    // Wildcard permissions are enabled
+}
+```
+
+---
+
+### forgetCachedPermissions()
+
+Forget the cached permissions.
+
+```php
+public function forgetCachedPermissions(): void
+```
+
+**Returns:** `void`
+
+**Description:** Clears the permission cache. Useful after manually modifying permissions in the database.
+
+**Example:**
+```php
+// After bulk permission updates
+DB::table('permissions')->where('name', 'old-name')
+    ->update(['name' => 'new-name']);
+
+$user->forgetCachedPermissions();
+```
+
+---
+
+### forgetWildcardPermissionIndex()
+
+Forget the wildcard permission index for this model.
+
+```php
+public function forgetWildcardPermissionIndex(): void
+```
+
+**Returns:** `void`
+
+**Description:** Clears the cached wildcard permission index.
+
+---
+
+### filterPermission()
+
+Find a permission and return the model instance.
+
+```php
+public function filterPermission(
+    string|int|Permission|BackedEnum $permission,
+    ?string $guardName = null
+): Permission
+```
+
+<ParamField path="permission" type="string|int|Permission|BackedEnum" required>
+  The permission to find
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name to use for lookup
+</ParamField>
+
+**Returns:** `Permission` - The permission model instance
+
+**Throws:** `PermissionDoesNotExist` if permission is not found
+
+**Example:**
+```php
+try {
+    $permission = $user->filterPermission('edit articles');
+    echo $permission->id;
+} catch (PermissionDoesNotExist $e) {
+    // Handle missing permission
+}
+```
+
+---
+
+## Usage Examples
+
+### Basic Permission Management
+
+```php
+$user = User::find(1);
+
+// Give permissions
+$user->givePermissionTo('edit articles');
+$user->givePermissionTo(['edit articles', 'delete articles']);
+
+// Check permissions
+if ($user->hasPermissionTo('edit articles')) {
+    // User can edit articles
+}
+
+if ($user->hasAnyPermission(['edit articles', 'delete articles'])) {
+    // User can either edit or delete
+}
+
+if ($user->hasAllPermissions(['edit articles', 'delete articles'])) {
+    // User can both edit and delete
+}
+
+// Revoke permissions
+$user->revokePermissionTo('delete articles');
+
+// Sync permissions (removes all others)
+$user->syncPermissions(['edit articles']);
+```
+
+### Direct vs Role Permissions
+
+```php
+// Check only direct permissions
+if ($user->hasDirectPermission('edit articles')) {
+    // Directly assigned
+}
+
+// Get all permissions (direct + via roles)
+$allPermissions = $user->getAllPermissions();
+
+// Get only direct permissions
+$directPermissions = $user->getDirectPermissions();
+
+// Get only role permissions
+$rolePermissions = $user->getPermissionsViaRoles();
+
+// Count permission sources
+echo "Direct: " . $user->getDirectPermissions()->count();
+echo "Via Roles: " . $user->getPermissionsViaRoles()->count();
+echo "Total: " . $user->getAllPermissions()->count();
+```
+
+### Query by Permissions
+
+```php
+// Get users with specific permission
+$editors = User::permission('edit articles')->get();
+
+// Get users with any of the permissions
+$privileged = User::permission(['edit articles', 'delete articles'])->get();
+
+// Get users without permission
+$restricted = User::withoutPermission('delete articles')->get();
+
+// Combine with other queries
+$activeEditors = User::permission('edit articles')
+    ->where('status', 'active')
+    ->orderBy('name')
+    ->get();
+```
+
+### Working with Permission Collections
+
+```php
+// Get all permission names
+$names = $user->getPermissionNames();
+echo $names->implode(', '); // "edit articles, delete articles"
+
+// Check if user has specific permission name
+if ($user->getPermissionNames()->contains('edit articles')) {
+    // Has permission
+}
+
+// Filter permissions
+$articlePermissions = $user->getAllPermissions()
+    ->filter(fn($p) => str_contains($p->name, 'article'));
+
+// Group permissions by guard
+$byGuard = $user->getAllPermissions()->groupBy('guard_name');
+```
+
+### Wildcard Permissions
+
+```php
+// If wildcard permissions are enabled
+if ($user->hasPermissionTo('articles.*')) {
+    // User has all article permissions
+}
+
+if ($user->hasPermissionTo('articles.edit')) {
+    // Matches 'articles.edit' or 'articles.*' or '*'
+}
+```
+
+---
+
+## See Also
+
+- [HasRoles Trait](/api/traits/has-roles) - Role management methods
+- [Permission Model](/api/models/permission) - Permission model API reference
+- [Assigning Permissions](/basic-usage/assigning-permissions) - Guide on permission assignment
+- [Checking Permissions](/basic-usage/checking-permissions) - Guide on checking permissions
+- [Wildcard Permissions](/advanced-usage/wildcard-permissions) - Using wildcard permissions

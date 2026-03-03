@@ -1,0 +1,339 @@
+---
+title: Contributing
+description: How to contribute to Laravel Permission development
+icon: "code-pull-request"
+---
+
+## We Welcome Contributions
+
+Thank you for considering contributing to Laravel Permission! This package is open source and we love to receive contributions from the community.
+
+## Ways to Contribute
+
+There are many ways to contribute to this project:
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Found a bug? Let us know by creating an issue on GitHub.
+  </Card>
+  <Card title="Suggest Features" icon="lightbulb">
+    Have an idea for improvement? We'd love to hear it.
+  </Card>
+  <Card title="Improve Documentation" icon="book">
+    Help make the docs better for everyone.
+  </Card>
+  <Card title="Submit Code" icon="code">
+    Fix bugs or implement new features with pull requests.
+  </Card>
+</CardGroup>
+
+## Reporting Issues
+
+### Before Creating an Issue
+
+<Steps>
+
+<Step title="Search existing issues">
+Check if your issue has already been reported in the [GitHub Issues](https://github.com/spatie/laravel-permission/issues).
+</Step>
+
+<Step title="Check the documentation">
+Review the [documentation](https://spatie.be/docs/laravel-permission/) and [troubleshooting guide](/troubleshooting) to see if your question is already answered.
+</Step>
+
+<Step title="Try the latest version">
+Ensure you're using the latest version of the package, as your issue may already be fixed.
+</Step>
+
+</Steps>
+
+### Creating a Good Issue Report
+
+When creating an issue, please include:
+
+```markdown
+**Environment:**
+- Package version: (e.g., 7.2.3)
+- Laravel version: (e.g., 12.0)
+- PHP version: (e.g., 8.4)
+- Database: (e.g., MySQL 8.0)
+
+**Description:**
+Clear description of the issue
+
+**Steps to Reproduce:**
+1. Step one
+2. Step two
+3. ...
+
+**Expected Behavior:**
+What you expected to happen
+
+**Actual Behavior:**
+What actually happened
+
+**Code Samples:**
+[Include relevant code snippets]
+
+**Error Messages:**
+[Include complete error messages and stack traces]
+```
+
+<Warning>
+**Security Issues**: If you discover a security vulnerability, please email [security@spatie.be](mailto:security@spatie.be) instead of creating a public issue.
+</Warning>
+
+## Contributing Code
+
+### Development Setup
+
+<Steps>
+
+<Step title="Fork the repository">
+Fork the [laravel-permission repository](https://github.com/spatie/laravel-permission) to your GitHub account.
+</Step>
+
+<Step title="Clone your fork">
+```bash
+git clone https://github.com/YOUR-USERNAME/laravel-permission.git
+cd laravel-permission
+```
+</Step>
+
+<Step title="Install dependencies">
+```bash
+composer install
+```
+</Step>
+
+<Step title="Create a branch">
+Create a new branch for your changes:
+```bash
+git checkout -b feature/your-feature-name
+```
+
+Or for bug fixes:
+```bash
+git checkout -b fix/issue-description
+```
+</Step>
+
+</Steps>
+
+### Coding Standards
+
+This package follows the [PSR-12](https://www.php-fig.org/psr/psr-12/) coding standard and uses [Laravel Pint](https://laravel.com/docs/pint) for code formatting.
+
+**Before committing, format your code:**
+
+```bash
+./vendor/bin/pint
+```
+
+<Note>
+Code that doesn't follow the style guidelines will not be accepted.
+</Note>
+
+### Writing Tests
+
+All new features and bug fixes must include tests. This package uses [Pest](https://pestphp.com/) for testing.
+
+**Run the test suite:**
+
+```bash
+composer test
+```
+
+**Run specific tests:**
+
+```bash
+./vendor/bin/pest --filter="test name"
+```
+
+**Test Coverage:**
+
+Aim for high test coverage for your changes:
+
+```bash
+composer test-coverage
+```
+
+<Accordion title="Example Test Structure">
+
+```php
+test('users can be assigned roles', function () {
+    $role = Role::create(['name' => 'writer']);
+    $user = User::factory()->create();
+    
+    $user->assignRole($role);
+    
+    expect($user->hasRole('writer'))->toBeTrue();
+    expect($user->roles)->toHaveCount(1);
+});
+
+test('assigning non-existent role throws exception', function () {
+    $user = User::factory()->create();
+    
+    $user->assignRole('non-existent');
+})->throws(RoleDoesNotExist::class);
+```
+
+</Accordion>
+
+### Submitting a Pull Request
+
+<Steps>
+
+<Step title="Ensure tests pass">
+```bash
+composer test
+./vendor/bin/pint
+```
+</Step>
+
+<Step title="Commit your changes">
+Write clear, descriptive commit messages:
+
+```bash
+git add .
+git commit -m "Add feature: description of feature"
+```
+
+Follow conventional commit format when possible:
+- `feat:` for new features
+- `fix:` for bug fixes
+- `docs:` for documentation changes
+- `test:` for test additions/changes
+- `refactor:` for code refactoring
+</Step>
+
+<Step title="Push to your fork">
+```bash
+git push origin feature/your-feature-name
+```
+</Step>
+
+<Step title="Create pull request">
+Go to the [original repository](https://github.com/spatie/laravel-permission) and create a pull request from your fork.
+
+**Include in your PR description:**
+- What changes you made
+- Why you made them
+- Any relevant issue numbers (e.g., "Fixes #123")
+- Screenshots if applicable (for UI changes)
+</Step>
+
+</Steps>
+
+### Pull Request Guidelines
+
+<Accordion title="Before Submitting">
+
+- Ensure your code follows PSR-12 standards
+- Run `./vendor/bin/pint` to format code
+- All tests must pass
+- Add tests for new functionality
+- Update documentation if needed
+- Keep pull requests focused on a single concern
+- Rebase your branch if needed to keep history clean
+
+</Accordion>
+
+<Accordion title="PR Review Process">
+
+1. **Automated checks** will run (tests, code style)
+2. **Maintainers will review** your code
+3. **Address feedback** if requested
+4. **Merge** once approved
+
+<Note>
+Maintainers may request changes or provide suggestions. This is normal and helps maintain code quality.
+</Note>
+
+</Accordion>
+
+## Improving Documentation
+
+Documentation improvements are always welcome!
+
+### Documentation Location
+
+The documentation source files are in the `/docs` directory of the repository.
+
+### Documentation Guidelines
+
+- Use clear, simple language
+- Include code examples
+- Test all code examples
+- Add navigation entries if creating new pages
+- Use proper markdown formatting
+- Include relevant links to related topics
+
+**To suggest documentation changes:**
+
+1. Edit the markdown files in `/docs`
+2. Submit a pull request
+3. Tag it with the `documentation` label
+
+## Community Guidelines
+
+When participating in discussions:
+
+- Be respectful and constructive
+- Stay on topic
+- Help others when you can
+- Follow the [Code of Conduct](https://github.com/spatie/.github/blob/main/CODE_OF_CONDUCT.md)
+
+## Recognition
+
+Contributors are recognized in:
+
+- The [CHANGELOG](https://github.com/spatie/laravel-permission/blob/main/CHANGELOG.md)
+- [GitHub Contributors](https://github.com/spatie/laravel-permission/graphs/contributors) page
+- Release notes for significant contributions
+
+## Development Resources
+
+<CardGroup cols={2}>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/spatie/laravel-permission">
+    View source code and contribute
+  </Card>
+  <Card title="Issue Tracker" icon="list-check" href="https://github.com/spatie/laravel-permission/issues">
+    Report bugs or request features
+  </Card>
+  <Card title="Pull Requests" icon="code-pull-request" href="https://github.com/spatie/laravel-permission/pulls">
+    View open pull requests
+  </Card>
+  <Card title="Discussions" icon="comments" href="https://github.com/spatie/laravel-permission/discussions">
+    Ask questions and share ideas
+  </Card>
+</CardGroup>
+
+## Questions?
+
+If you have questions about contributing:
+
+1. Check the [documentation](https://spatie.be/docs/laravel-permission/)
+2. Search [existing issues](https://github.com/spatie/laravel-permission/issues)
+3. Start a [discussion](https://github.com/spatie/laravel-permission/discussions)
+4. Ask in the [Spatie Discord](https://discord.gg/spatie)
+
+## Support Spatie
+
+Spatie invests significant resources in creating and maintaining open source packages. You can support their work by:
+
+- [Buying a paid product](https://spatie.be/open-source/support-us)
+- [Becoming a sponsor](https://github.com/sponsors/spatie)
+- Sending a postcard to: **Spatie, Kruikstraat 22, 2018 Antwerp, Belgium**
+
+<Note>
+All postcards received are published on [Spatie's virtual postcard wall](https://spatie.be/open-source/postcards).
+</Note>
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the [MIT License](https://github.com/spatie/laravel-permission/blob/main/LICENSE.md).
+
+---
+
+Thank you for contributing to Laravel Permission! Your efforts help make this package better for everyone.

@@ -1,0 +1,380 @@
+---
+title: Permission Model
+description: Complete API reference for the Permission model
+---
+
+The `Permission` model represents a single permission in the system. It extends Laravel's Eloquent Model and implements the `Spatie\Permission\Contracts\Permission` interface.
+
+## Properties
+
+<ResponseField name="id" type="int|string">
+  The primary key of the permission
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  The name of the permission
+</ResponseField>
+
+<ResponseField name="guard_name" type="string">
+  The guard name associated with this permission
+</ResponseField>
+
+<ResponseField name="created_at" type="?\Illuminate\Support\Carbon">
+  Timestamp when the permission was created
+</ResponseField>
+
+<ResponseField name="updated_at" type="?\Illuminate\Support\Carbon">
+  Timestamp when the permission was last updated
+</ResponseField>
+
+## Relationships
+
+<ResponseField name="roles" type="\Illuminate\Database\Eloquent\Collection">
+  Collection of roles that have this permission
+</ResponseField>
+
+<ResponseField name="users" type="\Illuminate\Database\Eloquent\Collection">
+  Collection of users who have this permission directly assigned
+</ResponseField>
+
+## Static Methods
+
+### create
+
+Create a new permission.
+
+<ParamField path="attributes" type="array" default="[]">
+  An array of attributes for the permission. Must include `name`. If `guard_name` is not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Permission">
+  The newly created permission instance
+</ResponseField>
+
+```php
+$permission = Permission::create([
+    'name' => 'edit articles',
+    'guard_name' => 'web'
+]);
+```
+
+<Note>
+Throws `PermissionAlreadyExists` if a permission with the same name and guard already exists.
+</Note>
+
+### findByName
+
+Find a permission by its name and optionally guard name.
+
+<ParamField path="name" type="string" required>
+  The name of the permission to find
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Permission">
+  The permission instance
+</ResponseField>
+
+```php
+$permission = Permission::findByName('edit articles');
+$permission = Permission::findByName('edit articles', 'api');
+```
+
+<Note>
+Throws `PermissionDoesNotExist` if the permission is not found.
+</Note>
+
+### findById
+
+Find a permission by its ID and optionally guard name.
+
+<ParamField path="id" type="int|string" required>
+  The ID of the permission to find
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Permission">
+  The permission instance
+</ResponseField>
+
+```php
+$permission = Permission::findById(1);
+$permission = Permission::findById(1, 'api');
+```
+
+<Note>
+Throws `PermissionDoesNotExist` if the permission is not found.
+</Note>
+
+### findOrCreate
+
+Find an existing permission or create a new one.
+
+<ParamField path="name" type="string" required>
+  The name of the permission
+</ParamField>
+
+<ParamField path="guardName" type="string|null" default="null">
+  The guard name. If not provided, the default guard will be used.
+</ParamField>
+
+<ResponseField name="return" type="Permission">
+  The found or newly created permission instance
+</ResponseField>
+
+```php
+$permission = Permission::findOrCreate('edit articles');
+$permission = Permission::findOrCreate('edit articles', 'api');
+```
+
+## Instance Methods
+
+### roles
+
+Get all roles that have this permission.
+
+<ResponseField name="return" type="\Illuminate\Database\Eloquent\Relations\BelongsToMany">
+  A BelongsToMany relationship to the Role model
+</ResponseField>
+
+```php
+$roles = $permission->roles;
+$roleCount = $permission->roles()->count();
+```
+
+### users
+
+Get all users who have this permission directly assigned (not via roles).
+
+<ResponseField name="return" type="\Illuminate\Database\Eloquent\Relations\BelongsToMany">
+  A BelongsToMany relationship to the User model
+</ResponseField>
+
+```php
+$users = $permission->users;
+$userCount = $permission->users()->count();
+```
+
+## Methods from HasRoles Trait
+
+### assignRole
+
+Assign one or more roles to this permission.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to assign (can be role name, ID, model instance, or array/collection of these)
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The permission instance for method chaining
+</ResponseField>
+
+```php
+$permission->assignRole('writer');
+$permission->assignRole(['writer', 'editor']);
+$permission->assignRole(1, 2, 3);
+```
+
+### removeRole
+
+Remove one or more roles from this permission.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to remove
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The permission instance for method chaining
+</ResponseField>
+
+```php
+$permission->removeRole('writer');
+$permission->removeRole(['writer', 'editor']);
+```
+
+### syncRoles
+
+Remove all current roles and assign the given ones.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to sync
+</ParamField>
+
+<ResponseField name="return" type="$this">
+  The permission instance for method chaining
+</ResponseField>
+
+```php
+$permission->syncRoles(['writer', 'editor']);
+$permission->syncRoles('writer');
+```
+
+### hasRole
+
+Check if the permission has any of the given roles.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to check
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to filter by
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the permission has any of the given roles
+</ResponseField>
+
+```php
+if ($permission->hasRole('writer')) {
+    // Permission has the writer role
+}
+
+if ($permission->hasRole(['writer', 'editor'])) {
+    // Permission has at least one of these roles
+}
+```
+
+### hasAllRoles
+
+Check if the permission has all of the given roles.
+
+<ParamField path="roles" type="string|array|Role|Collection|BackedEnum" required>
+  One or more roles to check
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to filter by
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the permission has all of the given roles
+</ResponseField>
+
+```php
+if ($permission->hasAllRoles(['writer', 'editor'])) {
+    // Permission has both roles
+}
+```
+
+### hasAnyRole
+
+Alias to `hasRole()` but without guard controls.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to check
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the permission has any of the given roles
+</ResponseField>
+
+```php
+if ($permission->hasAnyRole('writer', 'editor')) {
+    // Permission has at least one of these roles
+}
+```
+
+### hasExactRoles
+
+Check if the permission has exactly the given roles and no more.
+
+<ParamField path="roles" type="string|array|Role|Collection|BackedEnum" required>
+  One or more roles to check
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to filter by
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if the permission has exactly these roles
+</ResponseField>
+
+```php
+if ($permission->hasExactRoles(['writer', 'editor'])) {
+    // Permission has exactly these two roles, no more, no less
+}
+```
+
+### getDirectPermissions
+
+Get all permissions directly coupled to the permission model.
+
+<ResponseField name="return" type="\Illuminate\Support\Collection">
+  Collection of permissions
+</ResponseField>
+
+```php
+$permissions = $permission->getDirectPermissions();
+```
+
+### getRoleNames
+
+Get the names of all roles assigned to this permission.
+
+<ResponseField name="return" type="\Illuminate\Support\Collection">
+  Collection of role names
+</ResponseField>
+
+```php
+$roleNames = $permission->getRoleNames();
+// ['writer', 'editor']
+```
+
+## Query Scopes
+
+### role
+
+Scope the query to permissions that have certain roles.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to filter by
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to filter by
+</ParamField>
+
+```php
+$permissions = Permission::role('writer')->get();
+$permissions = Permission::role(['writer', 'editor'])->get();
+```
+
+### withoutRole
+
+Scope the query to permissions that don't have certain roles.
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  One or more roles to exclude
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to filter by
+</ParamField>
+
+```php
+$permissions = Permission::withoutRole('admin')->get();
+```
+
+## Configuration
+
+The Permission model uses the following configuration options:
+
+- `permission.table_names.permissions` - The database table name (default: `permissions`)
+- `permission.models.role` - The Role model class to use for relationships
+- `permission.table_names.role_has_permissions` - The pivot table for role-permission relationships
+- `permission.table_names.model_has_permissions` - The pivot table for direct user-permission relationships
+
+## Events
+
+The following events are fired when roles are attached/detached:
+
+- `Spatie\Permission\Events\RoleAttachedEvent` - Fired when a role is assigned
+- `Spatie\Permission\Events\RoleDetachedEvent` - Fired when a role is removed

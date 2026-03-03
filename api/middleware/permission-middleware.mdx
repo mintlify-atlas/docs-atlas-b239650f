@@ -1,0 +1,250 @@
+---
+title: PermissionMiddleware
+description: Middleware to protect routes requiring specific permissions
+---
+
+## Overview
+
+The `PermissionMiddleware` class restricts access to routes based on user permissions. It checks if the authenticated user has at least one of the specified permissions before allowing the request to proceed.
+
+**Namespace:** `Spatie\Permission\Middleware\PermissionMiddleware`
+
+## Registration
+
+Register the middleware in your `bootstrap/app.php` file:
+
+```php
+use Spatie\Permission\Middleware\PermissionMiddleware;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'permission' => PermissionMiddleware::class,
+    ]);
+})
+```
+
+## Methods
+
+### handle()
+
+Handles the incoming request and verifies the user has the required permission(s).
+
+```php
+public function handle(
+    Request $request, 
+    Closure $next, 
+    $permission, 
+    ?string $guard = null
+)
+```
+
+**Parameters:**
+- `$request` - The incoming HTTP request
+- `$next` - The next middleware closure
+- `$permission` - Permission name(s) as string or pipe-separated values
+- `$guard` - Optional authentication guard name
+
+**Behavior:**
+1. Retrieves the authenticated user from the specified guard
+2. Supports Passport client credentials for machine-to-machine authentication
+3. Verifies the user has the `HasPermissions` trait
+4. Checks if the user has any of the specified permissions (using pipe `|` as separator)
+5. Throws `UnauthorizedException` if user is not logged in, missing the trait, or lacks required permissions
+
+**Exceptions:**
+- `UnauthorizedException::notLoggedIn()` - User is not authenticated
+- `UnauthorizedException::missingTraitHasRoles($user)` - User model lacks `HasRoles` trait
+- `UnauthorizedException::forPermissions($permissions)` - User lacks any of the required permissions
+
+### using()
+
+Helper method to programmatically specify permissions and guard for the middleware.
+
+```php
+public static function using(
+    array|string|BackedEnum $permission, 
+    ?string $guard = null
+): string
+```
+
+**Parameters:**
+- `$permission` - Permission name(s) as string, array, or BackedEnum
+- `$guard` - Optional authentication guard name
+
+**Returns:** String representing the middleware with parameters
+
+**Example:**
+```php
+PermissionMiddleware::using('edit articles')
+PermissionMiddleware::using(['edit articles', 'delete articles'])
+PermissionMiddleware::using('edit articles', 'api')
+```
+
+## Usage Examples
+
+### Single Permission
+
+Protect a route requiring a single permission:
+
+```php
+Route::get('/posts/create', function () {
+    return 'Create Post';
+})->middleware('permission:create posts');
+```
+
+### Multiple Permissions (OR)
+
+Allow access if user has ANY of the specified permissions:
+
+```php
+Route::get('/posts/manage', function () {
+    return 'Manage Posts';
+})->middleware('permission:edit posts|delete posts|publish posts');
+```
+
+### With Custom Guard
+
+Specify a custom authentication guard:
+
+```php
+Route::get('/api/posts', function () {
+    return 'API Posts';
+})->middleware('permission:view posts,api');
+```
+
+### Using the using() Method
+
+Programmatically specify permissions:
+
+```php
+use Spatie\Permission\Middleware\PermissionMiddleware;
+
+Route::post('/posts', function () {
+    return 'Create Post';
+})->middleware(PermissionMiddleware::using('create posts'));
+
+// Multiple permissions
+Route::delete('/posts/{id}', function ($id) {
+    return 'Delete Post';
+})->middleware(PermissionMiddleware::using(['delete posts', 'manage posts']));
+
+// With guard
+Route::put('/api/posts/{id}', function ($id) {
+    return 'Update Post';
+})->middleware(PermissionMiddleware::using('edit posts', 'api'));
+```
+
+### Route Groups
+
+Apply to multiple routes:
+
+```php
+Route::middleware(['permission:manage posts'])->group(function () {
+    Route::get('/posts', [PostController::class, 'index']);
+    Route::post('/posts', [PostController::class, 'store']);
+    Route::put('/posts/{id}', [PostController::class, 'update']);
+    Route::delete('/posts/{id}', [PostController::class, 'destroy']);
+});
+```
+
+### With BackedEnum
+
+Use PHP enums for type-safe permission definitions:
+
+```php
+enum PostPermission: string
+{
+    case CREATE = 'create posts';
+    case EDIT = 'edit posts';
+    case DELETE = 'delete posts';
+    case PUBLISH = 'publish posts';
+}
+
+Route::post('/posts', function () {
+    return 'Create Post';
+})->middleware(PermissionMiddleware::using(PostPermission::CREATE));
+
+// Multiple enum permissions
+Route::get('/posts/manage', function () {
+    return 'Manage Posts';
+})->middleware(PermissionMiddleware::using([
+    PostPermission::EDIT, 
+    PostPermission::DELETE
+]));
+```
+
+### Controller Usage
+
+Apply in controller constructors:
+
+```php
+class PostController extends Controller
+{
+    public function __construct()
+    {
+        $this->middleware('permission:view posts')->only(['index', 'show']);
+        $this->middleware('permission:create posts')->only(['create', 'store']);
+        $this->middleware('permission:edit posts')->only(['edit', 'update']);
+        $this->middleware('permission:delete posts')->only('destroy');
+    }
+    
+    // Or combined
+    public function __construct()
+    {
+        $this->middleware('permission:create posts|edit posts')->only(['create', 'store', 'edit', 'update']);
+    }
+}
+```
+
+### RESTful Resource Controllers
+
+Protect all resource routes:
+
+```php
+Route::middleware(['permission:manage posts'])
+    ->resource('posts', PostController::class);
+
+// Or with specific permissions per action
+Route::resource('posts', PostController::class)
+    ->middleware([
+        'index' => 'permission:view posts',
+        'show' => 'permission:view posts',
+        'create' => 'permission:create posts',
+        'store' => 'permission:create posts',
+        'edit' => 'permission:edit posts',
+        'update' => 'permission:edit posts',
+        'destroy' => 'permission:delete posts',
+    ]);
+```
+
+## Passport Client Credentials
+
+The middleware supports Laravel Passport machine-to-machine authentication. When `permission.use_passport_client_credentials` is enabled in config, the middleware will authenticate Passport clients using bearer tokens.
+
+```php
+// config/permission.php
+'use_passport_client_credentials' => true,
+```
+
+## Combining with Other Middleware
+
+You can combine permission middleware with other middleware:
+
+```php
+// Require authentication AND specific permission
+Route::get('/posts', [PostController::class, 'index'])
+    ->middleware(['auth', 'permission:view posts']);
+
+// Require verification AND permission
+Route::post('/posts', [PostController::class, 'store'])
+    ->middleware(['auth', 'verified', 'permission:create posts']);
+```
+
+## Notes
+
+- The pipe character (`|`) is used to separate multiple permissions, implementing OR logic
+- User must have at least ONE of the specified permissions to pass
+- The middleware requires the user model to use the `HasRoles` trait (which includes permissions)
+- For AND logic (requiring ALL permissions), chain multiple middleware calls
+- Permissions are checked using the `canAny()` method on the user model
+- The middleware checks for the `hasAnyPermission()` method to verify the trait is present

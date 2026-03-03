@@ -1,0 +1,554 @@
+---
+title: 'Events'
+description: 'Listen to permission and role assignment events'
+icon: 'bolt-lightning'
+---
+
+The package dispatches events when permissions and roles are attached or detached, allowing you to react to permission changes in your application.
+
+## Configuration
+
+Events are **disabled by default**. Enable them in your configuration:
+
+```php config/permission.php
+'events_enabled' => true,
+```
+
+<Warning>
+  Enabling events may impact performance, especially when bulk assigning permissions. Only enable if you need to react to permission changes.
+</Warning>
+
+## Available Events
+
+The package provides four event classes:
+
+<Accordion title="PermissionAttachedEvent">
+  Fired when one or more permissions are attached to a model.
+
+  ```php
+  namespace Spatie\Permission\Events;
+
+  use Illuminate\Database\Eloquent\Model;
+  use Illuminate\Support\Collection;
+  use Spatie\Permission\Contracts\Permission;
+
+  class PermissionAttachedEvent
+  {
+      use Dispatchable;
+      use InteractsWithSockets;
+      use SerializesModels;
+
+      /**
+       * @param  array|int[]|string[]|Permission|Permission[]|Collection  $permissionsOrIds
+       */
+      public function __construct(
+          public Model $model, 
+          public mixed $permissionsOrIds
+      ) {}
+  }
+  ```
+</Accordion>
+
+<Accordion title="PermissionDetachedEvent">
+  Fired when one or more permissions are removed from a model.
+
+  ```php
+  namespace Spatie\Permission\Events;
+
+  use Illuminate\Database\Eloquent\Model;
+  use Illuminate\Support\Collection;
+  use Spatie\Permission\Contracts\Permission;
+
+  class PermissionDetachedEvent
+  {
+      use Dispatchable;
+      use InteractsWithSockets;
+      use SerializesModels;
+
+      /**
+       * @param  array|int[]|string[]|Permission|Permission[]|Collection  $permissionsOrIds
+       */
+      public function __construct(
+          public Model $model, 
+          public mixed $permissionsOrIds
+      ) {}
+  }
+  ```
+</Accordion>
+
+<Accordion title="RoleAttachedEvent">
+  Fired when one or more roles are attached to a model.
+
+  ```php
+  namespace Spatie\Permission\Events;
+
+  use Illuminate\Database\Eloquent\Model;
+  use Illuminate\Support\Collection;
+  use Spatie\Permission\Contracts\Role;
+
+  class RoleAttachedEvent
+  {
+      use Dispatchable;
+      use InteractsWithSockets;
+      use SerializesModels;
+
+      /**
+       * @param  array|int[]|string[]|Role|Role[]|Collection  $rolesOrIds
+       */
+      public function __construct(
+          public Model $model, 
+          public mixed $rolesOrIds
+      ) {}
+  }
+  ```
+</Accordion>
+
+<Accordion title="RoleDetachedEvent">
+  Fired when one or more roles are removed from a model.
+
+  ```php
+  namespace Spatie\Permission\Events;
+
+  use Illuminate\Database\Eloquent\Model;
+  use Illuminate\Support\Collection;
+  use Spatie\Permission\Contracts\Role;
+
+  class RoleDetachedEvent
+  {
+      use Dispatchable;
+      use InteractsWithSockets;
+      use SerializesModels;
+
+      /**
+       * @param  array|int[]|string[]|Role|Role[]|Collection  $rolesOrIds
+       */
+      public function __construct(
+          public Model $model, 
+          public mixed $rolesOrIds
+      ) {}
+  }
+  ```
+</Accordion>
+
+## Event Properties
+
+All events have two public properties:
+
+- `model` - The model that received or lost permissions/roles (e.g., User, Role)
+- `permissionsOrIds` / `rolesOrIds` - The permissions/roles that were attached or detached
+
+<Note>
+  The second property type varies:
+  - For **attach** events: usually an array of IDs (integers or UUIDs)
+  - For **detach** events: can be Permission/Role models or collections
+  
+  Always inspect the type in your listener before using.
+</Note>
+
+## Creating Listeners
+
+### Generate Listener
+
+```bash
+php artisan make:listener LogPermissionChanges
+```
+
+### Listener Examples
+
+<Accordion title="Log Permission Changes">
+  ```php app/Listeners/LogPermissionChanges.php
+  namespace App\Listeners;
+
+  use Illuminate\Support\Facades\Log;
+  use Spatie\Permission\Events\PermissionAttachedEvent;
+  use Spatie\Permission\Events\PermissionDetachedEvent;
+  use Spatie\Permission\Models\Permission;
+
+  class LogPermissionChanges
+  {
+      public function handleAttached(PermissionAttachedEvent $event)
+      {
+          $model = $event->model;
+          $permissions = $this->resolvePermissions($event->permissionsOrIds);
+          
+          Log::info('Permissions attached', [
+              'model' => get_class($model),
+              'model_id' => $model->id,
+              'permissions' => $permissions,
+          ]);
+      }
+      
+      public function handleDetached(PermissionDetachedEvent $event)
+      {
+          $model = $event->model;
+          $permissions = $this->resolvePermissions($event->permissionsOrIds);
+          
+          Log::info('Permissions detached', [
+              'model' => get_class($model),
+              'model_id' => $model->id,
+              'permissions' => $permissions,
+          ]);
+      }
+      
+      private function resolvePermissions($permissionsOrIds): array
+      {
+          // Handle different types
+          if (is_array($permissionsOrIds)) {
+              return Permission::whereIn('id', $permissionsOrIds)
+                  ->pluck('name')
+                  ->toArray();
+          }
+          
+          if ($permissionsOrIds instanceof Permission) {
+              return [$permissionsOrIds->name];
+          }
+          
+          if ($permissionsOrIds instanceof \Illuminate\Support\Collection) {
+              return $permissionsOrIds->pluck('name')->toArray();
+          }
+          
+          return [];
+      }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Send Notification on Role Change">
+  ```php app/Listeners/NotifyRoleChanges.php
+  namespace App\Listeners;
+
+  use App\Models\User;
+  use App\Notifications\RoleAssignedNotification;
+  use Spatie\Permission\Events\RoleAttachedEvent;
+  use Spatie\Permission\Models\Role;
+
+  class NotifyRoleChanges
+  {
+      public function handle(RoleAttachedEvent $event)
+      {
+          // Only notify for User models
+          if (! $event->model instanceof User) {
+              return;
+          }
+          
+          $user = $event->model;
+          $roleIds = is_array($event->rolesOrIds) 
+              ? $event->rolesOrIds 
+              : [$event->rolesOrIds];
+          
+          $roles = Role::whereIn('id', $roleIds)->get();
+          
+          // Send notification
+          $user->notify(new RoleAssignedNotification($roles));
+      }
+  }
+  ```
+</Accordion>
+
+<Accordion title="Audit Trail for Permissions">
+  ```php app/Listeners/AuditPermissionChanges.php
+  namespace App\Listeners;
+
+  use App\Models\AuditLog;
+  use Spatie\Permission\Events\PermissionAttachedEvent;
+  use Spatie\Permission\Events\PermissionDetachedEvent;
+
+  class AuditPermissionChanges
+  {
+      public function handleAttached(PermissionAttachedEvent $event)
+      {
+          AuditLog::create([
+              'user_id' => auth()->id(),
+              'action' => 'permission_attached',
+              'auditable_type' => get_class($event->model),
+              'auditable_id' => $event->model->id,
+              'metadata' => [
+                  'permissions' => $event->permissionsOrIds,
+              ],
+              'ip_address' => request()->ip(),
+          ]);
+      }
+      
+      public function handleDetached(PermissionDetachedEvent $event)
+      {
+          AuditLog::create([
+              'user_id' => auth()->id(),
+              'action' => 'permission_detached',
+              'auditable_type' => get_class($event->model),
+              'auditable_id' => $event->model->id,
+              'metadata' => [
+                  'permissions' => $this->extractPermissionData($event->permissionsOrIds),
+              ],
+              'ip_address' => request()->ip(),
+          ]);
+      }
+      
+      private function extractPermissionData($permissionsOrIds): array
+      {
+          if (is_array($permissionsOrIds)) {
+              return $permissionsOrIds;
+          }
+          
+          if ($permissionsOrIds instanceof \Illuminate\Support\Collection) {
+              return $permissionsOrIds->pluck('id')->toArray();
+          }
+          
+          return [];
+      }
+  }
+  ```
+</Accordion>
+
+## Registering Listeners
+
+Register your listeners in `EventServiceProvider`:
+
+```php app/Providers/EventServiceProvider.php
+namespace App\Providers;
+
+use App\Listeners\LogPermissionChanges;
+use App\Listeners\NotifyRoleChanges;
+use App\Listeners\AuditPermissionChanges;
+use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\RoleDetachedEvent;
+
+class EventServiceProvider extends ServiceProvider
+{
+    protected $listen = [
+        PermissionAttachedEvent::class => [
+            [LogPermissionChanges::class, 'handleAttached'],
+            [AuditPermissionChanges::class, 'handleAttached'],
+        ],
+        PermissionDetachedEvent::class => [
+            [LogPermissionChanges::class, 'handleDetached'],
+            [AuditPermissionChanges::class, 'handleDetached'],
+        ],
+        RoleAttachedEvent::class => [
+            NotifyRoleChanges::class,
+        ],
+        RoleDetachedEvent::class => [
+            // Add role detach listeners
+        ],
+    ];
+}
+```
+
+## When Events Fire
+
+Events fire when using these methods:
+
+### Permission Events
+
+```php
+// Fires PermissionAttachedEvent
+$user->givePermissionTo('edit posts');
+$role->givePermissionTo(['edit posts', 'delete posts']);
+$user->syncPermissions(['edit posts']); // Fires both attach and detach
+
+// Fires PermissionDetachedEvent
+$user->revokePermissionTo('edit posts');
+$role->revokePermissionTo('delete posts');
+$user->syncPermissions([]); // Detaches all
+```
+
+### Role Events
+
+```php
+// Fires RoleAttachedEvent
+$user->assignRole('editor');
+$user->assignRole(['editor', 'author']);
+$user->syncRoles(['editor']); // Fires both attach and detach
+
+// Fires RoleDetachedEvent
+$user->removeRole('editor');
+$user->removeRole(['editor', 'author']);
+$user->syncRoles([]); // Detaches all
+```
+
+<Note>
+  `syncPermissions()` and `syncRoles()` may fire both attach AND detach events in a single call.
+</Note>
+
+## Event Data Types
+
+### Understanding the Payload
+
+The event payload type varies based on the operation:
+
+```php
+use Spatie\Permission\Events\PermissionAttachedEvent;
+
+public function handle(PermissionAttachedEvent $event)
+{
+    $payload = $event->permissionsOrIds;
+    
+    // Could be:
+    // - array of IDs: [1, 2, 3]
+    // - array of UUIDs: ['uuid-1', 'uuid-2']
+    // - Permission model
+    // - Collection of Permission models
+    
+    // Safe approach: type check
+    if (is_array($payload)) {
+        // Array of IDs
+        $permissions = Permission::whereIn('id', $payload)->get();
+    } elseif ($payload instanceof \Illuminate\Support\Collection) {
+        // Already a collection
+        $permissions = $payload;
+    } elseif ($payload instanceof Permission) {
+        // Single permission
+        $permissions = collect([$payload]);
+    }
+}
+```
+
+## Practical Use Cases
+
+### Clear User Cache on Permission Change
+
+```php
+class ClearUserCacheListener
+{
+    public function handle($event)
+    {
+        $model = $event->model;
+        
+        // Clear user-specific cache
+        if ($model instanceof User) {
+            Cache::forget("user.{$model->id}.permissions");
+            Cache::forget("user.{$model->id}.roles");
+        }
+    }
+}
+```
+
+### Sync Permissions to External Service
+
+```php
+class SyncPermissionsToAPI
+{
+    public function handle(PermissionAttachedEvent $event)
+    {
+        if ($event->model instanceof User) {
+            Http::post('https://api.example.com/sync-permissions', [
+                'user_id' => $event->model->id,
+                'permissions' => $event->permissionsOrIds,
+            ]);
+        }
+    }
+}
+```
+
+### Track Permission History
+
+```php
+class TrackPermissionHistory
+{
+    public function handleAttached(PermissionAttachedEvent $event)
+    {
+        $this->record('attached', $event);
+    }
+    
+    public function handleDetached(PermissionDetachedEvent $event)
+    {
+        $this->record('detached', $event);
+    }
+    
+    private function record(string $action, $event)
+    {
+        DB::table('permission_history')->insert([
+            'model_type' => get_class($event->model),
+            'model_id' => $event->model->id,
+            'action' => $action,
+            'permissions' => json_encode($event->permissionsOrIds),
+            'changed_by' => auth()->id(),
+            'created_at' => now(),
+        ]);
+    }
+}
+```
+
+## Performance Considerations
+
+<Warning>
+  Each event fires synchronously and can slow down bulk operations:
+  
+  ```php
+  // This fires 100 PermissionAttachedEvent events!
+  foreach ($permissions as $permission) {
+      $user->givePermissionTo($permission);
+  }
+  ```
+  
+  Consider using queued listeners for expensive operations.
+</Warning>
+
+### Queued Listeners
+
+```php app/Listeners/QueuedPermissionLogger.php
+namespace App\Listeners;
+
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Queue\InteractsWithQueue;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+
+class QueuedPermissionLogger implements ShouldQueue
+{
+    use InteractsWithQueue;
+    
+    public function handle(PermissionAttachedEvent $event)
+    {
+        // This runs in a queue job
+        Log::info('Permission attached (queued)', [
+            'model_id' => $event->model->id,
+            'permissions' => $event->permissionsOrIds,
+        ]);
+    }
+}
+```
+
+## Testing Events
+
+```php
+use Illuminate\Support\Facades\Event;
+use Spatie\Permission\Events\RoleAttachedEvent;
+
+public function test_role_attached_event_fires()
+{
+    Event::fake([RoleAttachedEvent::class]);
+    
+    $user = User::factory()->create();
+    $user->assignRole('editor');
+    
+    Event::assertDispatched(RoleAttachedEvent::class, function ($event) use ($user) {
+        return $event->model->id === $user->id;
+    });
+}
+```
+
+## Disabling Events Temporarily
+
+```php
+// Disable events for bulk operations
+config(['permission.events_enabled' => false]);
+
+foreach ($users as $user) {
+    $user->assignRole('editor');
+}
+
+// Re-enable
+config(['permission.events_enabled' => true]);
+```
+
+## Best Practices
+
+<Tip>
+  - Only enable events if you need to react to permission changes
+  - Use queued listeners for expensive operations (API calls, external syncs)
+  - Type-check event payloads before using them
+  - Consider disabling events during seeders and bulk operations
+  - Cache expensive lookups within event listeners
+</Tip>

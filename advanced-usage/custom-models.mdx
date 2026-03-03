@@ -1,0 +1,609 @@
+---
+title: 'Custom Models'
+description: 'Extend and customize Permission and Role models'
+icon: 'wrench'
+---
+
+You can extend the default Permission and Role models to add custom functionality, relationships, or attributes.
+
+## Why Custom Models?
+
+Custom models allow you to:
+- Add additional attributes to permissions or roles
+- Define custom relationships
+- Implement custom business logic
+- Override default behavior
+- Add scopes and query builders
+
+## Creating Custom Models
+
+### Custom Permission Model
+
+<Steps>
+  <Step title="Create Custom Permission Class">
+    Create a new class that extends the package's Permission model:
+
+    ```php app/Models/Permission.php
+    namespace App\Models;
+
+    use Spatie\Permission\Models\Permission as SpatiePermission;
+
+    class Permission extends SpatiePermission
+    {
+        // Add custom attributes
+        protected $fillable = [
+            'name',
+            'guard_name',
+            'description', // Custom field
+            'category',    // Custom field
+        ];
+
+        // Add custom methods
+        public function getDescriptionAttribute($value)
+        {
+            return $value ?? "Permission: {$this->name}";
+        }
+
+        // Add custom relationships
+        public function category()
+        {
+            return $this->belongsTo(PermissionCategory::class);
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Implement Required Contract">
+    Your custom model must implement the Permission contract:
+
+    ```php
+    namespace App\Models;
+
+    use Spatie\Permission\Contracts\Permission as PermissionContract;
+    use Spatie\Permission\Models\Permission as SpatiePermission;
+
+    class Permission extends SpatiePermission implements PermissionContract
+    {
+        // Your custom code
+    }
+    ```
+
+    <Note>
+      The base `Spatie\Permission\Models\Permission` already implements this contract, so you inherit it automatically.
+    </Note>
+  </Step>
+
+  <Step title="Register in Configuration">
+    Update `config/permission.php` to use your custom model:
+
+    ```php config/permission.php
+    'models' => [
+        'permission' => App\Models\Permission::class,
+        'role' => Spatie\Permission\Models\Role::class,
+    ],
+    ```
+  </Step>
+</Steps>
+
+### Custom Role Model
+
+Follow the same pattern for roles:
+
+```php app/Models/Role.php
+namespace App\Models;
+
+use Spatie\Permission\Contracts\Role as RoleContract;
+use Spatie\Permission\Models\Role as SpatieRole;
+
+class Role extends SpatieRole implements RoleContract
+{
+    protected $fillable = [
+        'name',
+        'guard_name',
+        'description',
+        'level', // Hierarchy level
+    ];
+
+    // Add custom methods
+    public function isHigherThan(Role $role): bool
+    {
+        return $this->level > $role->level;
+    }
+
+    // Add custom relationships
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    // Add scopes
+    public function scopeForDepartment($query, $departmentId)
+    {
+        return $query->where('department_id', $departmentId);
+    }
+}
+```
+
+Register it:
+
+```php config/permission.php
+'models' => [
+    'permission' => App\Models\Permission::class,
+    'role' => App\Models\Role::class,
+],
+```
+
+## Required Contracts
+
+Your custom models must implement these contracts:
+
+### Permission Contract
+
+```php
+namespace Spatie\Permission\Contracts;
+
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+interface Permission
+{
+    /**
+     * A permission can be applied to roles.
+     */
+    public function roles(): BelongsToMany;
+
+    /**
+     * Find a permission by its name.
+     */
+    public static function findByName(string $name, ?string $guardName): self;
+
+    /**
+     * Find a permission by its id.
+     */
+    public static function findById(int|string $id, ?string $guardName): self;
+
+    /**
+     * Find or Create a permission by its name and guard name.
+     */
+    public static function findOrCreate(string $name, ?string $guardName): self;
+}
+```
+
+### Role Contract
+
+```php
+namespace Spatie\Permission\Contracts;
+
+use BackedEnum;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+
+interface Role
+{
+    /**
+     * A role may be given various permissions.
+     */
+    public function permissions(): BelongsToMany;
+
+    /**
+     * Find a role by its name and guard name.
+     */
+    public static function findByName(string $name, ?string $guardName): self;
+
+    /**
+     * Find a role by its id and guard name.
+     */
+    public static function findById(int|string $id, ?string $guardName): self;
+
+    /**
+     * Find or create a role by its name and guard name.
+     */
+    public static function findOrCreate(string $name, ?string $guardName): self;
+
+    /**
+     * Determine if the user may perform the given permission.
+     */
+    public function hasPermissionTo(string|int|Permission|BackedEnum $permission, ?string $guardName = null): bool;
+}
+```
+
+<Warning>
+  All contract methods must be implemented. The base models already implement these, so extending them is the easiest approach.
+</Warning>
+
+## Database Migrations
+
+If adding custom columns, create a migration:
+
+```php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table('permissions', function (Blueprint $table) {
+            $table->string('description')->nullable();
+            $table->string('category')->nullable();
+        });
+
+        Schema::table('roles', function (Blueprint $table) {
+            $table->string('description')->nullable();
+            $table->integer('level')->default(0);
+            $table->foreignId('department_id')->nullable()->constrained();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('permissions', function (Blueprint $table) {
+            $table->dropColumn(['description', 'category']);
+        });
+
+        Schema::table('roles', function (Blueprint $table) {
+            $table->dropColumn(['description', 'level', 'department_id']);
+        });
+    }
+};
+```
+
+Run the migration:
+
+```bash
+php artisan migrate
+```
+
+## Practical Examples
+
+### Hierarchical Roles
+
+```php app/Models/Role.php
+namespace App\Models;
+
+use Spatie\Permission\Models\Role as SpatieRole;
+
+class Role extends SpatieRole
+{
+    protected $fillable = ['name', 'guard_name', 'level'];
+
+    /**
+     * Check if this role is higher than another
+     */
+    public function isHigherThan(Role $role): bool
+    {
+        return $this->level > $role->level;
+    }
+
+    /**
+     * Check if user can grant this role
+     */
+    public function canBeGrantedBy(Role $granterRole): bool
+    {
+        return $granterRole->level > $this->level;
+    }
+
+    /**
+     * Get roles below this level
+     */
+    public function scopeLowerThan($query, int $level)
+    {
+        return $query->where('level', '<', $level);
+    }
+}
+```
+
+Usage:
+
+```php
+$admin = Role::create(['name' => 'admin', 'level' => 100]);
+$editor = Role::create(['name' => 'editor', 'level' => 50]);
+$writer = Role::create(['name' => 'writer', 'level' => 10]);
+
+if ($admin->isHigherThan($editor)) {
+    // Admin can manage editors
+}
+
+// Get all roles an admin can assign
+$assignableRoles = Role::lowerThan($admin->level)->get();
+```
+
+### Categorized Permissions
+
+```php app/Models/Permission.php
+namespace App\Models;
+
+use Spatie\Permission\Models\Permission as SpatiePermission;
+
+class Permission extends SpatiePermission
+{
+    protected $fillable = ['name', 'guard_name', 'category', 'description'];
+
+    /**
+     * Scope by category
+     */
+    public function scopeCategory($query, string $category)
+    {
+        return $query->where('category', $category);
+    }
+
+    /**
+     * Get all categories
+     */
+    public static function categories(): array
+    {
+        return static::distinct('category')
+            ->pluck('category')
+            ->filter()
+            ->toArray();
+    }
+
+    /**
+     * Get permissions grouped by category
+     */
+    public static function groupedByCategory()
+    {
+        return static::all()->groupBy('category');
+    }
+}
+```
+
+Usage:
+
+```php
+// Create categorized permissions
+Permission::create([
+    'name' => 'view posts',
+    'category' => 'Content',
+    'description' => 'View all posts in the system',
+]);
+
+Permission::create([
+    'name' => 'manage users',
+    'category' => 'Administration',
+    'description' => 'Create, edit, and delete users',
+]);
+
+// Query by category
+$contentPermissions = Permission::category('Content')->get();
+
+// Get all categories
+$categories = Permission::categories();
+
+// Group by category
+$grouped = Permission::groupedByCategory();
+```
+
+### Timestamped Permission Changes
+
+```php app/Models/Role.php
+namespace App\Models;
+
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role as SpatieRole;
+
+class Role extends SpatieRole
+{
+    /**
+     * Override to add timestamps to pivot
+     */
+    public function permissions()
+    {
+        return parent::permissions()
+            ->withTimestamps()
+            ->withPivot('created_at', 'updated_at');
+    }
+
+    /**
+     * Get when a permission was granted
+     */
+    public function permissionGrantedAt($permission): ?\Carbon\Carbon
+    {
+        $permission = $this->getStoredPermission($permission);
+        
+        $pivot = DB::table('role_has_permissions')
+            ->where('role_id', $this->id)
+            ->where('permission_id', $permission->id)
+            ->first();
+
+        return $pivot?->created_at 
+            ? \Carbon\Carbon::parse($pivot->created_at)
+            : null;
+    }
+}
+```
+
+### Soft Deletes
+
+```php app/Models/Permission.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Spatie\Permission\Models\Permission as SpatiePermission;
+
+class Permission extends SpatiePermission
+{
+    use SoftDeletes;
+
+    protected $dates = ['deleted_at'];
+
+    /**
+     * Include soft deleted in cache if needed
+     */
+    protected static function getPermissions(array $params = [], bool $onlyOne = false)
+    {
+        // Override to include soft deleted permissions if needed
+        return static::withTrashed()
+            ->where($params)
+            ->when($onlyOne, fn($q) => $q->first(), fn($q) => $q->get());
+    }
+}
+```
+
+Add soft deletes column:
+
+```php
+Schema::table('permissions', function (Blueprint $table) {
+    $table->softDeletes();
+});
+
+Schema::table('roles', function (Blueprint $table) {
+    $table->softDeletes();
+});
+```
+
+## Programmatic Registration
+
+You can also register models programmatically instead of using config:
+
+```php app/Providers/AppServiceProvider.php
+namespace App\Providers;
+
+use App\Models\Permission;
+use App\Models\Role;
+use Illuminate\Support\ServiceProvider;
+use Spatie\Permission\PermissionRegistrar;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        // Set models programmatically
+        $registrar = app(PermissionRegistrar::class);
+        $registrar->setPermissionClass(Permission::class);
+        $registrar->setRoleClass(Role::class);
+    }
+}
+```
+
+## Custom Table Names
+
+If you need custom table names for your models:
+
+```php app/Models/Permission.php
+class Permission extends SpatiePermission
+{
+    protected $table = 'custom_permissions';
+}
+```
+
+Update the config:
+
+```php config/permission.php
+'table_names' => [
+    'roles' => 'roles',
+    'permissions' => 'custom_permissions',
+    'model_has_permissions' => 'model_has_permissions',
+    'model_has_roles' => 'model_has_roles',
+    'role_has_permissions' => 'role_has_permissions',
+],
+```
+
+## Observers
+
+Add observers for custom logic:
+
+```php app/Observers/PermissionObserver.php
+namespace App\Observers;
+
+use App\Models\Permission;
+use Illuminate\Support\Str;
+
+class PermissionObserver
+{
+    public function creating(Permission $permission): void
+    {
+        // Auto-generate slug
+        if (! $permission->slug) {
+            $permission->slug = Str::slug($permission->name);
+        }
+    }
+
+    public function updated(Permission $permission): void
+    {
+        // Log changes
+        activity()
+            ->performedOn($permission)
+            ->log('Permission updated');
+    }
+}
+```
+
+Register the observer:
+
+```php app/Providers/AppServiceProvider.php
+use App\Models\Permission;
+use App\Observers\PermissionObserver;
+
+public function boot(): void
+{
+    Permission::observe(PermissionObserver::class);
+}
+```
+
+## Caching Custom Attributes
+
+If you add many custom columns, exclude them from cache to save memory:
+
+```php config/permission.php
+'cache' => [
+    'column_names_except' => [
+        'created_at',
+        'updated_at', 
+        'deleted_at',
+        'description', // Your custom column
+        'category',    // Your custom column
+    ],
+],
+```
+
+<Warning>
+  Columns in `column_names_except` won't be available in cached permission checks. Only exclude columns that aren't needed for authorization logic.
+</Warning>
+
+## Testing Custom Models
+
+```php tests/Feature/CustomPermissionModelTest.php
+namespace Tests\Feature;
+
+use App\Models\Permission;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class CustomPermissionModelTest extends TestCase
+{
+    use RefreshDatabase;
+
+    public function test_can_create_permission_with_description(): void
+    {
+        $permission = Permission::create([
+            'name' => 'edit posts',
+            'description' => 'Allows editing of blog posts',
+        ]);
+
+        $this->assertEquals('Allows editing of blog posts', $permission->description);
+    }
+
+    public function test_can_filter_by_category(): void
+    {
+        Permission::create(['name' => 'view posts', 'category' => 'Content']);
+        Permission::create(['name' => 'manage users', 'category' => 'Admin']);
+
+        $contentPerms = Permission::category('Content')->get();
+
+        $this->assertCount(1, $contentPerms);
+        $this->assertEquals('view posts', $contentPerms->first()->name);
+    }
+}
+```
+
+## Best Practices
+
+<Tip>
+  - Always extend the base models rather than reimplementing from scratch
+  - Implement the required contracts
+  - Test custom functionality thoroughly
+  - Document custom attributes and methods
+  - Consider caching implications of custom columns
+  - Use migrations for schema changes
+  - Keep custom logic focused and single-purpose
+</Tip>

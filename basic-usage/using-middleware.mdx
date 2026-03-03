@@ -1,0 +1,564 @@
+---
+title: 'Using Middleware'
+description: 'Learn how to protect routes with permission and role middleware'
+---
+
+Laravel Permission provides middleware to protect your routes based on roles and permissions. This ensures that only authorized users can access specific routes.
+
+## Available Middleware
+
+The package provides three middleware classes:
+
+<CardGroup cols={3}>
+  <Card title="PermissionMiddleware" icon="key">
+    Check user permissions
+  </Card>
+  <Card title="RoleMiddleware" icon="users">
+    Check user roles
+  </Card>
+  <Card title="RoleOrPermissionMiddleware" icon="shield">
+    Check either role or permission
+  </Card>
+</CardGroup>
+
+## Registering Middleware
+
+First, register the middleware in your `bootstrap/app.php` file:
+
+<Tabs>
+  <Tab title="Laravel 11+">
+    ```php
+    // bootstrap/app.php
+    use Spatie\Permission\Middleware\PermissionMiddleware;
+    use Spatie\Permission\Middleware\RoleMiddleware;
+    use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+
+    return Application::configure(basePath: dirname(__DIR__))
+        ->withMiddleware(function (Middleware $middleware) {
+            $middleware->alias([
+                'role' => RoleMiddleware::class,
+                'permission' => PermissionMiddleware::class,
+                'role_or_permission' => RoleOrPermissionMiddleware::class,
+            ]);
+        })
+        ->create();
+    ```
+  </Tab>
+
+  <Tab title="Laravel 10 and Below">
+    ```php
+    // app/Http/Kernel.php
+    protected $middlewareAliases = [
+        // ...
+        'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+        'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+        'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
+    ];
+    ```
+  </Tab>
+</Tabs>
+
+## Permission Middleware
+
+Protect routes based on user permissions.
+
+<Tabs>
+  <Tab title="Single Permission">
+    Require a specific permission:
+
+    ```php
+    use App\Http\Controllers\ArticleController;
+
+    Route::get('/articles/edit/{article}', [ArticleController::class, 'edit'])
+        ->middleware('permission:edit articles');
+    ```
+
+    <Note>
+      If the user doesn't have the permission, a `403 Unauthorized` exception is thrown.
+    </Note>
+  </Tab>
+
+  <Tab title="Multiple Permissions (OR)">
+    User needs ANY of these permissions:
+
+    ```php
+    // User needs 'edit articles' OR 'delete articles'
+    Route::delete('/articles/{article}', [ArticleController::class, 'destroy'])
+        ->middleware('permission:edit articles|delete articles');
+    ```
+
+    <Tip>
+      Use the pipe `|` separator for OR logic. The user only needs one of the listed permissions.
+    </Tip>
+  </Tab>
+
+  <Tab title="With Specific Guard">
+    Check permission on a specific guard:
+
+    ```php
+    // Check 'edit articles' permission on 'api' guard
+    Route::get('/api/articles/edit', [ArticleController::class, 'edit'])
+        ->middleware('permission:edit articles,api');
+    ```
+  </Tab>
+</Tabs>
+
+### Using the Static Method
+
+For more complex scenarios, use the static `using()` method:
+
+```php
+use Spatie\Permission\Middleware\PermissionMiddleware;
+
+// Single permission
+Route::get('/articles', [ArticleController::class, 'index'])
+    ->middleware(PermissionMiddleware::using('view articles'));
+
+// Multiple permissions
+Route::get('/articles', [ArticleController::class, 'index'])
+    ->middleware(PermissionMiddleware::using(['view articles', 'edit articles']));
+
+// With specific guard
+Route::get('/articles', [ArticleController::class, 'index'])
+    ->middleware(PermissionMiddleware::using('view articles', 'api'));
+```
+
+## Role Middleware
+
+Protect routes based on user roles.
+
+<Tabs>
+  <Tab title="Single Role">
+    Require a specific role:
+
+    ```php
+    Route::get('/admin/dashboard', [AdminController::class, 'dashboard'])
+        ->middleware('role:admin');
+    ```
+  </Tab>
+
+  <Tab title="Multiple Roles (OR)">
+    User needs ANY of these roles:
+
+    ```php
+    // User must be 'editor' OR 'admin'
+    Route::get('/articles/pending', [ArticleController::class, 'pending'])
+        ->middleware('role:editor|admin');
+    ```
+  </Tab>
+
+  <Tab title="With Specific Guard">
+    Check role on a specific guard:
+
+    ```php
+    Route::get('/api/admin', [ApiAdminController::class, 'index'])
+        ->middleware('role:admin,api');
+    ```
+  </Tab>
+</Tabs>
+
+### Using the Static Method
+
+```php
+use Spatie\Permission\Middleware\RoleMiddleware;
+
+// Single role
+Route::get('/admin', [AdminController::class, 'index'])
+    ->middleware(RoleMiddleware::using('admin'));
+
+// Multiple roles
+Route::get('/content', [ContentController::class, 'index'])
+    ->middleware(RoleMiddleware::using(['writer', 'editor']));
+
+// With specific guard
+Route::get('/admin', [AdminController::class, 'index'])
+    ->middleware(RoleMiddleware::using('admin', 'api'));
+```
+
+## Role or Permission Middleware
+
+Allow access if user has either a specific role OR permission.
+
+```php
+// User needs role 'admin' OR permission 'edit articles'
+Route::put('/articles/{article}', [ArticleController::class, 'update'])
+    ->middleware('role_or_permission:admin|edit articles');
+
+// Multiple options
+Route::get('/content/manage', [ContentController::class, 'manage'])
+    ->middleware('role_or_permission:admin|editor|manage content');
+```
+
+<Note>
+  This middleware checks both roles and permissions. Access is granted if the user has ANY of the specified roles OR permissions.
+</Note>
+
+### Using the Static Method
+
+```php
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+
+Route::get('/special', [SpecialController::class, 'index'])
+    ->middleware(RoleOrPermissionMiddleware::using(['admin', 'special-access']));
+```
+
+## Route Groups
+
+Apply middleware to multiple routes at once:
+
+<Tabs>
+  <Tab title="Permission Group">
+    ```php
+    Route::middleware(['permission:edit articles'])->group(function () {
+        Route::get('/articles/create', [ArticleController::class, 'create']);
+        Route::post('/articles', [ArticleController::class, 'store']);
+        Route::get('/articles/{article}/edit', [ArticleController::class, 'edit']);
+        Route::put('/articles/{article}', [ArticleController::class, 'update']);
+    });
+    ```
+  </Tab>
+
+  <Tab title="Role Group">
+    ```php
+    Route::middleware(['role:admin'])->prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/settings', [AdminController::class, 'settings']);
+    });
+    ```
+  </Tab>
+
+  <Tab title="Nested Groups">
+    ```php
+    Route::middleware(['role:admin'])->group(function () {
+        // All admin routes
+        Route::get('/admin/dashboard', [AdminController::class, 'dashboard']);
+        
+        // Super admin only
+        Route::middleware(['permission:delete users'])->group(function () {
+            Route::delete('/admin/users/{user}', [AdminController::class, 'deleteUser']);
+        });
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Using Route Macros
+
+The package provides convenient route macros:
+
+<Tabs>
+  <Tab title="role() Macro">
+    ```php
+    // Single role
+    Route::get('/admin/dashboard', [AdminController::class, 'dashboard'])
+        ->role('admin');
+
+    // Multiple roles
+    Route::get('/content', [ContentController::class, 'index'])
+        ->role(['writer', 'editor']);
+    ```
+  </Tab>
+
+  <Tab title="permission() Macro">
+    ```php
+    // Single permission
+    Route::get('/articles/edit', [ArticleController::class, 'edit'])
+        ->permission('edit articles');
+
+    // Multiple permissions
+    Route::get('/articles/manage', [ArticleController::class, 'manage'])
+        ->permission(['edit articles', 'delete articles']);
+    ```
+  </Tab>
+
+  <Tab title="roleOrPermission() Macro">
+    ```php
+    Route::get('/special', [SpecialController::class, 'index'])
+        ->roleOrPermission(['admin', 'special-access']);
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  Route macros are defined in `PermissionServiceProvider.php:90-114` and provide a cleaner syntax.
+</Note>
+
+## Controller Middleware
+
+Apply middleware in your controller constructor:
+
+```php
+namespace App\Http\Controllers;
+
+use App\Http\Controllers\Controller;
+
+class ArticleController extends Controller
+{
+    public function __construct()
+    {
+        // Apply to all methods
+        $this->middleware('permission:view articles');
+        
+        // Apply to specific methods
+        $this->middleware('permission:edit articles')
+             ->only(['create', 'store', 'edit', 'update']);
+        
+        // Except certain methods
+        $this->middleware('permission:delete articles')
+             ->except(['index', 'show']);
+        
+        // Multiple middleware
+        $this->middleware('role:admin|editor')
+             ->only(['publish', 'unpublish']);
+    }
+}
+```
+
+## How Middleware Works
+
+Let's look at the internal logic:
+
+<CodeGroup>
+
+```php PermissionMiddleware
+// From: src/Middleware/PermissionMiddleware.php:16-42
+
+public function handle(Request $request, Closure $next, $permission, ?string $guard = null)
+{
+    $authGuard = Auth::guard($guard);
+    $user = $authGuard->user();
+
+    // Check if user is logged in
+    if (!$user) {
+        throw UnauthorizedException::notLoggedIn();
+    }
+
+    // Check if user has the HasRoles trait
+    if (!method_exists($user, 'hasAnyPermission')) {
+        throw UnauthorizedException::missingTraitHasRoles($user);
+    }
+
+    // Parse permissions (handles pipe-separated list)
+    $permissions = explode('|', $permission);
+
+    // Check if user has ANY of the permissions
+    if (!$user->canAny($permissions)) {
+        throw UnauthorizedException::forPermissions($permissions);
+    }
+
+    return $next($request);
+}
+```
+
+```php RoleMiddleware
+// From: src/Middleware/RoleMiddleware.php:16-42
+
+public function handle(Request $request, Closure $next, $role, ?string $guard = null)
+{
+    $authGuard = Auth::guard($guard);
+    $user = $authGuard->user();
+
+    if (!$user) {
+        throw UnauthorizedException::notLoggedIn();
+    }
+
+    if (!method_exists($user, 'hasAnyRole')) {
+        throw UnauthorizedException::missingTraitHasRoles($user);
+    }
+
+    $roles = explode('|', $role);
+
+    if (!$user->hasAnyRole($roles)) {
+        throw UnauthorizedException::forRoles($roles);
+    }
+
+    return $next($request);
+}
+```
+
+```php RoleOrPermissionMiddleware
+// From: src/Middleware/RoleOrPermissionMiddleware.php:16-42
+
+public function handle(Request $request, Closure $next, $roleOrPermission, ?string $guard = null)
+{
+    $authGuard = Auth::guard($guard);
+    $user = $authGuard->user();
+
+    if (!$user) {
+        throw UnauthorizedException::notLoggedIn();
+    }
+
+    $rolesOrPermissions = explode('|', $roleOrPermission);
+
+    // Check if user has ANY of the permissions OR roles
+    if (!$user->canAny($rolesOrPermissions) && !$user->hasAnyRole($rolesOrPermissions)) {
+        throw UnauthorizedException::forRolesOrPermissions($rolesOrPermissions);
+    }
+
+    return $next($request);
+}
+```
+
+</CodeGroup>
+
+## Exception Handling
+
+When middleware denies access, it throws an `UnauthorizedException`:
+
+```php
+namespace App\Exceptions;
+
+use Illuminate\Foundation\Exceptions\Handler as ExceptionHandler;
+use Spatie\Permission\Exceptions\UnauthorizedException;
+
+class Handler extends ExceptionHandler
+{
+    public function register()
+    {
+        $this->renderable(function (UnauthorizedException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'error' => 'You do not have permission to access this resource.'
+                ], 403);
+            }
+            
+            return redirect()->route('home')
+                ->with('error', 'You do not have permission to access this resource.');
+        });
+    }
+}
+```
+
+<Warning>
+  Without custom handling, unauthorized access returns a 403 Forbidden response.
+</Warning>
+
+## Passport Client Credentials
+
+The middleware supports Laravel Passport machine-to-machine authentication:
+
+```php
+// Automatically checks Passport clients when no user is authenticated
+// This is handled in the middleware's handle() method
+
+if (!$user && $request->bearerToken() && config('permission.use_passport_client_credentials')) {
+    $user = Guard::getPassportClient($guard);
+}
+```
+
+<Note>
+  Enable in config:
+  
+  ```php
+  'use_passport_client_credentials' => true,
+  ```
+</Note>
+
+## Best Practices
+
+<Tip>
+  **Layer your protection**: Use middleware for route protection AND check permissions in controllers/policies for additional security:
+
+  ```php
+  // Route protection (first line of defense)
+  Route::put('/articles/{article}', [ArticleController::class, 'update'])
+      ->middleware('permission:edit articles');
+
+  // Controller check (second line)
+  public function update(Article $article)
+  {
+      $this->authorize('update', $article);
+      // ...
+  }
+  ```
+</Tip>
+
+<Tip>
+  **Use permissions over roles**: Prefer permission middleware over role middleware for better flexibility:
+
+  ```php
+  // Good - flexible as role permissions change
+  Route::middleware('permission:edit articles')
+
+  // Less flexible - tied to specific roles
+  Route::middleware('role:editor')
+  ```
+</Tip>
+
+<Warning>
+  **Don't forget authentication**: Ensure routes have auth middleware before permission/role middleware:
+
+  ```php
+  Route::middleware(['auth', 'permission:edit articles'])->group(function () {
+      // Routes
+  });
+  ```
+</Warning>
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="API Routes with Guards">
+    ```php
+    // routes/api.php
+    Route::middleware(['auth:sanctum'])->group(function () {
+        Route::middleware(['permission:view articles,api'])->group(function () {
+            Route::get('/articles', [ApiArticleController::class, 'index']);
+        });
+        
+        Route::middleware(['permission:edit articles,api'])->group(function () {
+            Route::post('/articles', [ApiArticleController::class, 'store']);
+            Route::put('/articles/{article}', [ApiArticleController::class, 'update']);
+        });
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Admin Panel Protection">
+    ```php
+    Route::prefix('admin')
+        ->middleware(['auth', 'role:admin'])
+        ->group(function () {
+            Route::get('/dashboard', [AdminController::class, 'dashboard']);
+            
+            // User management
+            Route::middleware(['permission:manage users'])->group(function () {
+                Route::resource('users', UserController::class);
+            });
+            
+            // Settings (super admin only)
+            Route::middleware(['permission:manage settings'])->group(function () {
+                Route::get('/settings', [SettingsController::class, 'edit']);
+                Route::put('/settings', [SettingsController::class, 'update']);
+            });
+        });
+    ```
+  </Accordion>
+
+  <Accordion title="RESTful Resource Protection">
+    ```php
+    Route::resource('articles', ArticleController::class)
+        ->middleware([
+            'index' => 'permission:view articles',
+            'show' => 'permission:view articles', 
+            'create' => 'permission:create articles',
+            'store' => 'permission:create articles',
+            'edit' => 'permission:edit articles',
+            'update' => 'permission:edit articles',
+            'destroy' => 'permission:delete articles',
+        ]);
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Multiple Guards" icon="shield-halved" href="/advanced-usage/multiple-guards">
+    Use permissions with different authentication guards
+  </Card>
+  <Card title="Events" icon="bell" href="/advanced-usage/events">
+    Handle permission and role events
+  </Card>
+</CardGroup>

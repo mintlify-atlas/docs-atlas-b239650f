@@ -1,0 +1,234 @@
+---
+title: Changelog
+description: Recent changes and version history for Laravel Permission
+icon: "clock-rotate-left"
+---
+
+## Version History
+
+This package follows [Semantic Versioning](https://semver.org/). The changelog below highlights recent changes. For the complete version history, see the [full CHANGELOG on GitHub](https://github.com/spatie/laravel-permission/blob/main/CHANGELOG.md).
+
+## Latest Releases
+
+### v7.2.3 - 2026-02-23
+
+Updated config file comments to point to new v7 event class names.
+
+### v7.2.2 - 2026-02-22
+
+**What's Changed**
+- Clear wildcard permission index when assigning or removing roles by @freekmurze in [#2925](https://github.com/spatie/laravel-permission/pull/2925)
+
+**Full Changelog**: [7.2.1...7.2.2](https://github.com/spatie/laravel-permission/compare/7.2.1...7.2.2)
+
+### v7.2.1 - 2026-02-21
+
+**What's Changed**
+- Add Laravel 13 support
+- Upgrade to laravel/passport ^13.0
+- Drop prefer-lowest from CI matrix
+
+### v7.2.0 - 2026-02-18
+
+**What's Changed**
+- Fix: do not treat string '0' as empty role/permission input by @laraib15 in [#2916](https://github.com/spatie/laravel-permission/pull/2916)
+
+**Full Changelog**: [7.1.0...7.2.0](https://github.com/spatie/laravel-permission/compare/7.1.0...7.2.0)
+
+### v7.1.0 - 2026-02-14
+
+**What's Changed**
+- Bring back support for PHP 8.3 by @ssw1cblarrion in [#2918](https://github.com/spatie/laravel-permission/pull/2918)
+
+**Full Changelog**: [7.0.0...7.1.0](https://github.com/spatie/laravel-permission/compare/7.0.0...7.1.0)
+
+## Major Releases
+
+### v7.0.0 - 2026-02-11
+
+<Note>
+Version 7 modernizes the codebase while keeping the upgrade path relatively easy. See the [Upgrading Guide](/upgrading) for migration instructions.
+</Note>
+
+**Modernize codebase for v7**
+
+The aim for v7 is to modernize the codebase while keeping the upgrade path easy. Modern PHP/Laravel features, Pest tests, but no big architectural changes.
+
+#### Version Requirements
+- Requires PHP ^8.4 and Laravel ^12.0
+- Test suite uses Pest ^3.0
+
+#### Service Provider
+- Converted to `PackageServiceProvider` from `spatie/laravel-package-tools`
+- Removed Lumen support
+
+#### Class Renames
+- Event classes now have an `Event` suffix
+  - `PermissionAttached` → `PermissionAttachedEvent`
+  - `RoleAttached` → `RoleAttachedEvent`
+  - etc.
+- Command classes now have a `Command` suffix
+  - `CacheReset` → `CacheResetCommand`
+  - `CreateRole` → `CreateRoleCommand`
+  - etc.
+
+#### Type Safety
+- Added return types and parameter types throughout traits, middleware, exceptions, contracts, and commands
+
+#### Code Modernization
+- `is_a($this, X::class)` → `$this instanceof X`
+- `get_class($obj)` → `$obj::class`
+- `strpos($x, $y) !== false` → `str_contains($x, $y)`
+- Constructor promotion in `WildcardPermission`
+- Proper `use` imports for global classes
+
+#### Cleanup
+- Removed deprecated `clearClassPermissions()` method
+- Removed `__construct` from `Wildcard` contract
+- Modernized migration stubs
+
+#### Testing
+- Converted entire test suite from PHPUnit to Pest
+
+**Full Changelog**: [6.24.1...7.0.0](https://github.com/spatie/laravel-permission/compare/6.24.1...7.0.0)
+
+### v6.0.0 - 2023-10-25
+
+<Accordion title="View v6.0.0 Changes">
+
+Major version with numerous improvements and breaking changes.
+
+**Key Changes:**
+- Full UUID/GUID/ULID support
+- Refactored static properties to non-static
+- Added BackedEnum support
+- Dropped PHP 7.3 and 7.4 support
+- `@haspermission` Blade directive
+- Added `withoutRole` and `withoutPermission` scopes
+- Middleware namespace changed from `Middlewares` to `Middleware`
+- Wildcard permissions algorithm performance improvements
+- Laravel Octane support improvements
+
+**Breaking Changes:**
+- ID parameters must be passed as integers, not strings
+- `getPermissionClass()` and `getRoleClass()` now return strings
+- Migration files updated to anonymous class syntax
+- `Role->hasPermissionTo()` signature changed to match `HasPermissions` trait
+
+**Full Changelog**: [5.11.1...6.0.0](https://github.com/spatie/laravel-permission/compare/5.11.1...6.0.0)
+
+</Accordion>
+
+### v5.0.0 - 2021-08-31
+
+<Accordion title="View v5.0.0 Changes">
+
+**Key Changes:**
+- Changed default guard lookup to prefer current user's guard
+- Added Teams/Groups feature
+- Customized pivots instead of `role_id`, `permission_id`
+- Performance improvements
+
+**Full Changelog**: [4.4.1...5.0.0](https://github.com/spatie/laravel-permission/compare/4.4.1...5.0.0)
+
+</Accordion>
+
+### v4.0.0 - 2021-01-27
+
+<Accordion title="View v4.0.0 Changes">
+
+**Key Changes:**
+- Dropped support for Laravel 5.8
+- Fixed bug when adding roles to unsaved models
+- Enforced unique constraints at database level
+- Made `PermissionRegistrar::initializeCache()` public
+- Changed from `Support\Collection` to `Eloquent\Collection`
+
+**Requirements:**
+- PHP 7.2.5+
+- Laravel 6.0+
+
+**Full Changelog**: [3.18.0...4.0.0](https://github.com/spatie/laravel-permission/compare/3.18.0...4.0.0)
+
+</Accordion>
+
+## Notable Features by Version
+
+<Accordion title="Recent Feature Highlights">
+
+### v6.24.0 (2025-12-13)
+- Add BackedEnum support to RoleOrPermissionMiddleware
+- Add missing `roleOrPermission()` route macro
+- PHP 8.5 compatibility fixes
+
+### v6.22.0 (2025-10-27)
+- Dispatch `RoleDetached` event on `syncRoles`
+- Fix TOCTOU race condition for Octane
+- Add `assign-role` artisan command
+
+### v6.20.0 (2025-06-14)
+- Add translations support for exception messages
+
+### v6.17.0 (2025-04-09)
+- Route macro functions: add backed enum support
+
+### v6.16.0 (2025-02-28)
+- Middleware: support enums in role/permission middleware
+
+### v6.15.0 (2025-02-17)
+- Added 4 events for adding and removing roles or permissions
+- Fixed bug loading user roles across different teams
+
+### v6.11.0 (2025-01-30)
+- Add configurable team resolver for permission team ID (helpful for Jetstream)
+
+### v6.10.0 (2024-11-05)
+- Improve performance for hydrated collections
+- Remove v5 cache fallback alias
+- Include Larastan in dev dependencies
+
+</Accordion>
+
+## Support & Compatibility
+
+### Current Version Requirements
+
+| Package Version | PHP Version | Laravel Version |
+|----------------|-------------|------------------|
+| v7.x | 8.4+ | 12.0+ |
+| v6.x | 8.0+ | 8.0+ |
+| v5.x | 7.3+ | 6.0+ |
+| v4.x | 7.2.5+ | 6.0+ |
+
+<Note>
+Always use the latest minor version within your major version for the latest bug fixes and improvements.
+</Note>
+
+## Migration Guides
+
+When upgrading between major versions:
+
+- [Upgrading from v6 to v7](/upgrading#upgrading-from-v6-to-v7)
+- [Upgrading from v5 to v6](/upgrading#upgrading-from-v5-to-v6)
+- [Upgrading from v4 to v5](/upgrading#upgrading-from-v4-to-v5)
+- [Upgrading from v3 to v4](/upgrading#upgrading-from-v3-to-v4)
+
+## Release Notes
+
+For detailed release notes and contributor information, see:
+
+- [GitHub Releases](https://github.com/spatie/laravel-permission/releases)
+- [Full Changelog](https://github.com/spatie/laravel-permission/blob/main/CHANGELOG.md)
+- [Pull Requests](https://github.com/spatie/laravel-permission/pulls?q=is%3Apr+is%3Aclosed)
+
+## Stay Updated
+
+To stay informed about new releases:
+
+1. Watch the [GitHub repository](https://github.com/spatie/laravel-permission)
+2. Follow [@spatie_be](https://twitter.com/spatie_be) on Twitter
+3. Subscribe to [Spatie's newsletter](https://spatie.be/newsletter)
+
+<Warning>
+Always review the changelog and test thoroughly before upgrading in production environments.
+</Warning>

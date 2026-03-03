@@ -1,0 +1,359 @@
+---
+title: 'Using Roles'
+description: 'Learn how to create and manage roles in Laravel Permission'
+---
+
+Roles are a way to group permissions together. A user can have multiple roles, and each role can have multiple permissions.
+
+## Creating Roles
+
+Roles can be created in several ways, similar to permissions.
+
+<Tabs>
+  <Tab title="Using create()">
+    The standard way to create a role:
+
+    ```php
+    use Spatie\Permission\Models\Role;
+
+    $role = Role::create(['name' => 'writer']);
+    ```
+
+    <Note>
+      Like permissions, the `guard_name` defaults to your application's default guard.
+    </Note>
+  </Tab>
+
+  <Tab title="Specifying Guard">
+    Create a role for a specific authentication guard:
+
+    ```php
+    Role::create([
+        'name' => 'admin',
+        'guard_name' => 'api'
+    ]);
+    ```
+  </Tab>
+
+  <Tab title="Using findOrCreate()">
+    Safe method that returns existing role or creates a new one:
+
+    ```php
+    // Returns existing role or creates a new one
+    $role = Role::findOrCreate('writer');
+
+    // With custom guard
+    $role = Role::findOrCreate('admin', 'api');
+    ```
+
+    <Tip>
+      Use `findOrCreate()` in seeders to avoid duplicate entries.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Finding Roles
+
+Retrieve existing roles using various lookup methods.
+
+<Steps>
+  <Step title="Find by Name">
+    Look up a role by its name:
+
+    ```php
+    $role = Role::findByName('writer');
+
+    // With specific guard
+    $role = Role::findByName('admin', 'api');
+    ```
+
+    <Warning>
+      Throws `RoleDoesNotExist` exception if the role is not found.
+    </Warning>
+  </Step>
+
+  <Step title="Find by ID">
+    Retrieve a role by its database ID:
+
+    ```php
+    $role = Role::findById(1);
+
+    // With specific guard
+    $role = Role::findById(1, 'api');
+    ```
+  </Step>
+
+  <Step title="Find or Create">
+    Safe method that never throws exceptions:
+
+    ```php
+    $role = Role::findOrCreate('moderator');
+    ```
+  </Step>
+</Steps>
+
+## Role Properties
+
+Each role model has the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | int\|string | Primary key |
+| `name` | string | Role name (e.g., 'writer', 'admin') |
+| `guard_name` | string | Authentication guard |
+| `created_at` | Carbon | Creation timestamp |
+| `updated_at` | Carbon | Last update timestamp |
+
+## Assigning Permissions to Roles
+
+Roles can have multiple permissions assigned to them.
+
+<Tabs>
+  <Tab title="Give Permission">
+    Assign one or more permissions to a role:
+
+    ```php
+    $role = Role::findByName('writer');
+
+    // Single permission
+    $role->givePermissionTo('edit articles');
+
+    // Multiple permissions
+    $role->givePermissionTo('edit articles', 'delete articles');
+
+    // Using permission models
+    $role->givePermissionTo($permission);
+    ```
+  </Tab>
+
+  <Tab title="Revoke Permission">
+    Remove permissions from a role:
+
+    ```php
+    $role = Role::findByName('writer');
+
+    // Revoke single permission
+    $role->revokePermissionTo('delete articles');
+    ```
+  </Tab>
+
+  <Tab title="Sync Permissions">
+    Replace all permissions with a new set:
+
+    ```php
+    $role = Role::findByName('writer');
+
+    // This will remove all existing permissions and add only these
+    $role->syncPermissions(['edit articles', 'publish articles']);
+    ```
+
+    <Warning>
+      `syncPermissions()` removes ALL existing permissions before adding new ones.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Checking Role Permissions
+
+Verify if a role has specific permissions:
+
+```php
+$role = Role::findByName('writer');
+
+// Check if role has a permission
+if ($role->hasPermissionTo('edit articles')) {
+    // Role has the permission
+}
+```
+
+<Note>
+  The method signature from HasPermissions trait:
+  
+  ```php
+  public function hasPermissionTo(
+      string|int|Permission|BackedEnum $permission, 
+      ?string $guardName = null
+  ): bool
+  ```
+</Note>
+
+## Retrieving Role Permissions
+
+Get all permissions assigned to a role:
+
+```php
+$role = Role::findByName('writer');
+
+// Get all permissions as a collection
+$permissions = $role->permissions;
+
+// Get permission names only
+$permissionNames = $role->permissions->pluck('name');
+// Example output: ['edit articles', 'publish articles']
+
+// Count permissions
+$count = $role->permissions()->count();
+```
+
+## Role Relationships
+
+### Permissions Relationship
+
+Access the role's permissions:
+
+```php
+$role = Role::findByName('writer');
+
+// Eager load permissions
+$role->load('permissions');
+
+// Query permissions
+$articlePermissions = $role->permissions()
+    ->where('name', 'like', '%article%')
+    ->get();
+```
+
+### Users Relationship
+
+Access users who have this role:
+
+```php
+$role = Role::findByName('admin');
+
+// Get all users with this role
+$admins = $role->users;
+
+// Count users with this role
+$adminCount = $role->users()->count();
+
+// Query users
+$activeAdmins = $role->users()
+    ->where('active', true)
+    ->get();
+```
+
+## Deleting Roles
+
+Remove roles from the database:
+
+```php
+$role = Role::findByName('writer');
+$role->delete();
+```
+
+<Warning>
+  When you delete a role:
+  - It's automatically detached from all users
+  - The permission cache is cleared
+  - The permissions assigned to the role are NOT deleted (only the role-permission relationships)
+</Warning>
+
+## Common Role Patterns
+
+<Tabs>
+  <Tab title="Basic Hierarchy">
+    A simple role hierarchy for a blog:
+
+    ```php
+    // Create roles
+    $reader = Role::create(['name' => 'reader']);
+    $writer = Role::create(['name' => 'writer']);
+    $editor = Role::create(['name' => 'editor']);
+    $admin = Role::create(['name' => 'admin']);
+
+    // Reader can only view
+    $reader->givePermissionTo('view articles');
+
+    // Writer can view and edit
+    $writer->givePermissionTo('view articles', 'edit articles');
+
+    // Editor can view, edit, and publish
+    $editor->givePermissionTo('view articles', 'edit articles', 'publish articles');
+
+    // Admin can do everything
+    $admin->givePermissionTo('view articles', 'edit articles', 'publish articles', 'delete articles');
+    ```
+  </Tab>
+
+  <Tab title="Department Roles">
+    Organizing roles by department:
+
+    ```php
+    // Sales department
+    $salesManager = Role::create(['name' => 'sales-manager']);
+    $salesManager->givePermissionTo('view sales', 'create orders', 'edit orders');
+
+    // Support department
+    $supportAgent = Role::create(['name' => 'support-agent']);
+    $supportAgent->givePermissionTo('view tickets', 'reply to tickets');
+
+    // Finance department
+    $accountant = Role::create(['name' => 'accountant']);
+    $accountant->givePermissionTo('view invoices', 'create invoices');
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+<Tip>
+  **Role Naming**: Use descriptive, lowercase names with hyphens:
+  - Good: `super-admin`, `content-editor`, `customer-support`
+  - Avoid: `SuperAdmin`, `EDITOR`, `Support_Agent`
+</Tip>
+
+<Note>
+  **Role Seeders**: Create roles in database seeders:
+
+  ```php
+  // database/seeders/RoleSeeder.php
+  public function run()
+  {
+      // Create roles
+      $admin = Role::findOrCreate('admin');
+      $editor = Role::findOrCreate('editor');
+      $writer = Role::findOrCreate('writer');
+
+      // Assign permissions
+      $admin->syncPermissions(['edit articles', 'delete articles', 'publish articles']);
+      $editor->syncPermissions(['edit articles', 'publish articles']);
+      $writer->syncPermissions(['edit articles']);
+  }
+  ```
+</Note>
+
+<Tip>
+  **Keep Roles Simple**: Don't create too many roles. Instead:
+  - Use a few broad roles with different permissions
+  - Combine roles on users when needed
+  - Use direct permission assignment for exceptions
+</Tip>
+
+## Guard-Specific Roles
+
+When using multiple authentication guards:
+
+```php
+// Web guard (regular users)
+$webAdmin = Role::create(['name' => 'admin', 'guard_name' => 'web']);
+
+// API guard (API clients)
+$apiAdmin = Role::create(['name' => 'admin', 'guard_name' => 'api']);
+
+// These are treated as completely separate roles
+```
+
+<Warning>
+  Roles with the same name but different guards are independent entities.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Assigning Permissions" icon="user-check" href="/basic-usage/assigning-permissions">
+    Learn how to assign roles and permissions to users
+  </Card>
+  <Card title="Checking Permissions" icon="shield-check" href="/basic-usage/checking-permissions">
+    Check if users have permissions
+  </Card>
+</CardGroup>

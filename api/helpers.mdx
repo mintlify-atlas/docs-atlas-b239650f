@@ -1,0 +1,208 @@
+---
+title: Helper Functions
+description: Global helper functions for Laravel Permission
+---
+
+## Overview
+
+Laravel Permission provides several global helper functions to make working with guards and team-based permissions easier. These functions are automatically available throughout your application.
+
+## getModelForGuard
+
+Retrieve the model class name associated with a specific guard.
+
+```php
+function getModelForGuard(string $guard): ?string
+```
+
+### Parameters
+
+<ParamField path="guard" type="string" required>
+  The name of the guard to look up (e.g., 'web', 'api', 'admin')
+</ParamField>
+
+### Returns
+
+Returns the fully qualified class name of the model associated with the guard, or `null` if no model is found.
+
+### Usage
+
+```php
+// Get the model for the default web guard
+$model = getModelForGuard('web');
+// Returns: 'App\Models\User'
+
+// Get the model for an admin guard
+$adminModel = getModelForGuard('admin');
+// Returns: 'App\Models\Admin' or null if not configured
+
+// Check if a guard has an associated model
+if ($model = getModelForGuard('api')) {
+    // Model exists, do something with it
+}
+```
+
+This function is useful when you need to dynamically determine which model class is used for authentication on a specific guard.
+
+---
+
+## setPermissionsTeamId
+
+Set the current team ID for team-based permissions. This affects all subsequent permission checks and queries.
+
+```php
+function setPermissionsTeamId(int|string|Model|null $id): void
+```
+
+### Parameters
+
+<ParamField path="id" type="int|string|Model|null" required>
+  The team identifier to set. Can be:
+  - An integer team ID
+  - A string team ID (if using UUIDs)
+  - A Model instance (the ID will be extracted)
+  - `null` to clear the team context
+</ParamField>
+
+### Returns
+
+This function does not return a value.
+
+### Usage
+
+```php
+// Set team context using an ID
+setPermissionsTeamId(1);
+
+// Set team context using a UUID string
+setPermissionsTeamId('550e8400-e29b-41d4-a716-446655440000');
+
+// Set team context using a model instance
+$team = Team::find(1);
+setPermissionsTeamId($team);
+
+// Clear team context (use global permissions)
+setPermissionsTeamId(null);
+
+// Example: Switch team context for a specific operation
+$originalTeamId = getPermissionsTeamId();
+setPermissionsTeamId($newTeam);
+
+// Perform team-specific permission checks
+if (auth()->user()->can('edit posts')) {
+    // This checks permissions for $newTeam
+}
+
+// Restore original team context
+setPermissionsTeamId($originalTeamId);
+```
+
+<Note>
+This function is only relevant when using the [team-based permissions](/advanced-usage/teams-permissions) feature. If teams are not enabled in your configuration, this function has no effect.
+</Note>
+
+---
+
+## getPermissionsTeamId
+
+Retrieve the currently active team ID for permission checks.
+
+```php
+function getPermissionsTeamId(): int|string|null
+```
+
+### Parameters
+
+This function has no parameters.
+
+### Returns
+
+Returns the current team ID (integer or string), or `null` if no team context is set.
+
+### Usage
+
+```php
+// Get the current team context
+$teamId = getPermissionsTeamId();
+
+if ($teamId) {
+    echo "Current team: {$teamId}";
+} else {
+    echo "No team context set (using global permissions)";
+}
+
+// Example: Conditionally execute code based on team context
+if (getPermissionsTeamId() === null) {
+    // Handle global permissions
+} else {
+    // Handle team-specific permissions
+}
+
+// Example: Save and restore team context
+$savedTeamId = getPermissionsTeamId();
+
+setPermissionsTeamId($differentTeam);
+// ... do some work ...
+
+setPermissionsTeamId($savedTeamId); // Restore previous context
+```
+
+<Note>
+This function is only relevant when using the [team-based permissions](/advanced-usage/teams-permissions) feature. It will return `null` if teams are not enabled or no team context has been set.
+</Note>
+
+---
+
+## Helper Function Best Practices
+
+### Team Context Management
+
+When working with team-based permissions, always restore the original team context after temporarily changing it:
+
+```php
+public function performCrossTeamOperation()
+{
+    $originalTeamId = getPermissionsTeamId();
+    
+    try {
+        foreach ($teams as $team) {
+            setPermissionsTeamId($team);
+            // Perform team-specific operations
+        }
+    } finally {
+        setPermissionsTeamId($originalTeamId);
+    }
+}
+```
+
+### Guard Model Resolution
+
+Use `getModelForGuard` when you need to work with different user models across multiple guards:
+
+```php
+public function getUserModelForGuard(string $guard)
+{
+    $modelClass = getModelForGuard($guard);
+    
+    if (!$modelClass) {
+        throw new \RuntimeException("No model found for guard: {$guard}");
+    }
+    
+    return app($modelClass);
+}
+```
+
+### Middleware Example
+
+You can use these helpers in middleware to set team context automatically:
+
+```php
+public function handle($request, Closure $next)
+{
+    if ($teamId = $request->route('team_id')) {
+        setPermissionsTeamId($teamId);
+    }
+    
+    return $next($request);
+}
+```

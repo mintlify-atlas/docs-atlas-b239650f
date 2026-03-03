@@ -1,0 +1,399 @@
+---
+title: 'Multiple Guards'
+description: 'Use permissions with different authentication guards'
+icon: 'shield-halved'
+---
+
+Laravel Permission supports multiple authentication guards, allowing you to use different permission systems for different user types (e.g., users, admins, API clients).
+
+## Understanding Guards
+
+Each permission and role is assigned to a specific guard. This allows you to:
+- Separate permissions for web users and API users
+- Have different role systems for different user types
+- Use the same permission names across different guards
+
+## Configuration
+
+Guards are configured in Laravel's `config/auth.php` file:
+
+```php config/auth.php
+'guards' => [
+    'web' => [
+        'driver' => 'session',
+        'provider' => 'users',
+    ],
+    'api' => [
+        'driver' => 'token',
+        'provider' => 'users',
+    ],
+    'admin' => [
+        'driver' => 'session',
+        'provider' => 'admins',
+    ],
+],
+
+'providers' => [
+    'users' => [
+        'driver' => 'eloquent',
+        'model' => App\Models\User::class,
+    ],
+    'admins' => [
+        'driver' => 'eloquent',
+        'model' => App\Models\Admin::class,
+    ],
+],
+```
+
+## Creating Permissions for Guards
+
+When creating permissions, specify the guard:
+
+```php
+use Spatie\Permission\Models\Permission;
+
+// Create permission for web guard (default)
+Permission::create(['name' => 'edit posts', 'guard_name' => 'web']);
+
+// Create permission for api guard
+Permission::create(['name' => 'edit posts', 'guard_name' => 'api']);
+
+// Create permission for admin guard
+Permission::create(['name' => 'edit posts', 'guard_name' => 'admin']);
+```
+
+<Note>
+  The same permission name can exist for different guards. They are treated as separate permissions.
+</Note>
+
+## Creating Roles for Guards
+
+```php
+use Spatie\Permission\Models\Role;
+
+// Create role for web guard
+$webRole = Role::create(['name' => 'editor', 'guard_name' => 'web']);
+
+// Create role for admin guard
+$adminRole = Role::create(['name' => 'editor', 'guard_name' => 'admin']);
+
+// Assign guard-specific permissions
+$webRole->givePermissionTo('edit posts'); // Uses web guard
+$adminRole->givePermissionTo('edit posts'); // Need to specify admin guard
+```
+
+## Default Guard Detection
+
+The package automatically detects the guard from your model's configuration.
+
+### Setting Guard on Model
+
+Define guard name directly on your model:
+
+```php app/Models/User.php
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Spatie\Permission\Traits\HasRoles;
+
+class User extends Authenticatable
+{
+    use HasRoles;
+    
+    protected $guard_name = 'web';
+}
+```
+
+```php app/Models/Admin.php
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Spatie\Permission\Traits\HasRoles;
+
+class Admin extends Authenticatable
+{
+    use HasRoles;
+    
+    protected $guard_name = 'admin';
+}
+```
+
+### Dynamic Guard Detection
+
+You can also define a `guardName()` method:
+
+```php
+public function guardName()
+{
+    // Return guard based on some logic
+    return $this->is_api_user ? 'api' : 'web';
+}
+```
+
+### Automatic Detection from Config
+
+If no guard is specified, the package looks at `config/auth.php` to determine which guard(s) use this model:
+
+```php
+use Spatie\Permission\Guard;
+
+// Get all guards for a model
+$guards = Guard::getNames(User::class);
+// Returns: collect(['web', 'api'])
+
+// Get default guard for a model
+$guard = Guard::getDefaultName(User::class);
+// Returns: 'web' (from config/auth.defaults.guard)
+```
+
+## Assigning Permissions and Roles
+
+### Using Default Guard
+
+When guard is defined on the model, it's used automatically:
+
+```php
+// User model has guard_name = 'web'
+$user = User::find(1);
+$user->givePermissionTo('edit posts'); // Uses 'web' guard
+$user->assignRole('editor'); // Uses 'web' guard
+```
+
+### Specifying Guard Explicitly
+
+You can specify the guard when checking permissions:
+
+```php
+// Create permissions for different guards
+Permission::create(['name' => 'edit posts', 'guard_name' => 'web']);
+Permission::create(['name' => 'edit posts', 'guard_name' => 'api']);
+
+// Assign with specific guard
+$user->givePermissionTo('edit posts', 'api');
+
+// Check with specific guard
+$user->hasPermissionTo('edit posts', 'api'); // true
+$user->hasPermissionTo('edit posts', 'web'); // false
+```
+
+## Finding Permissions by Guard
+
+```php
+// Find permission by name and guard
+$permission = Permission::findByName('edit posts', 'web');
+
+// Find role by name and guard
+$role = Role::findByName('admin', 'api');
+
+// Find or create with guard
+$permission = Permission::findOrCreate('edit posts', 'admin');
+```
+
+## Checking Permissions with Guards
+
+```php
+$user->hasPermissionTo('edit posts'); // Uses model's default guard
+$user->hasPermissionTo('edit posts', 'api'); // Check specific guard
+
+// Via Gate
+Gate::allows('edit posts'); // Uses authenticated user's guard
+
+// Blade directives
+@can('edit posts') // Uses default guard
+    {{-- Content --}}
+@endcan
+```
+
+## Middleware with Guards
+
+```php
+Route::middleware(['auth:admin', 'permission:edit posts,admin'])->group(function () {
+    // Routes for admin guard
+});
+
+Route::middleware(['auth:api', 'permission:edit posts,api'])->group(function () {
+    // Routes for API guard
+});
+```
+
+## Guard Validation
+
+The package validates guard compatibility:
+
+```php
+use Spatie\Permission\Exceptions\GuardDoesNotMatch;
+
+// This will throw GuardDoesNotMatch exception
+$webUser = User::find(1); // guard: web
+$apiPermission = Permission::findByName('edit posts', 'api');
+
+$webUser->givePermissionTo($apiPermission); // Exception!
+```
+
+<Warning>
+  You cannot assign permissions or roles from one guard to a model using a different guard. The guards must match.
+</Warning>
+
+## Multiple Guards on One Model
+
+A model can support multiple guards:
+
+```php app/Models/User.php
+class User extends Authenticatable
+{
+    use HasRoles;
+    
+    // Return array of guards
+    protected $guard_name = ['web', 'api'];
+}
+```
+
+Or using a method:
+
+```php
+public function guardName()
+{
+    return ['web', 'api'];
+}
+```
+
+Now the user can receive permissions from both guards:
+
+```php
+$user->givePermissionTo('edit posts', 'web');
+$user->givePermissionTo('view analytics', 'api');
+
+$user->hasPermissionTo('edit posts', 'web'); // true
+$user->hasPermissionTo('view analytics', 'api'); // true
+```
+
+## Practical Examples
+
+### Separate Admin System
+
+```php
+// Create admin-specific permissions
+Permission::create(['name' => 'manage users', 'guard_name' => 'admin']);
+Permission::create(['name' => 'view logs', 'guard_name' => 'admin']);
+
+// Create admin role
+$superAdmin = Role::create(['name' => 'super-admin', 'guard_name' => 'admin']);
+$superAdmin->givePermissionTo(['manage users', 'view logs']);
+
+// Assign to admin user
+$admin = Admin::find(1);
+$admin->assignRole('super-admin');
+
+// Check permission
+if ($admin->hasPermissionTo('manage users')) {
+    // Admin can manage users
+}
+```
+
+### API vs Web Permissions
+
+```php
+// Web users can view and edit
+Permission::create(['name' => 'view posts', 'guard_name' => 'web']);
+Permission::create(['name' => 'edit posts', 'guard_name' => 'web']);
+
+// API users get limited access
+Permission::create(['name' => 'view posts', 'guard_name' => 'api']);
+// No edit permission for API
+
+$webUser->givePermissionTo('edit posts', 'web');
+$apiUser->givePermissionTo('view posts', 'api');
+```
+
+### Customer vs Employee Portals
+
+```php
+// Employee portal (admin guard)
+Permission::create(['name' => 'access dashboard', 'guard_name' => 'employee']);
+Permission::create(['name' => 'manage orders', 'guard_name' => 'employee']);
+
+// Customer portal (web guard)
+Permission::create(['name' => 'place orders', 'guard_name' => 'customer']);
+Permission::create(['name' => 'view order history', 'guard_name' => 'customer']);
+
+$employee->assignRole('staff', 'employee');
+$customer->assignRole('buyer', 'customer');
+```
+
+## Helper Functions
+
+```php
+use Spatie\Permission\Guard;
+
+// Get model for a specific guard
+$model = Guard::getModelForGuard('admin');
+// Returns: App\Models\Admin::class
+
+// Get provider model (including LDAP)
+$model = Guard::getProviderModel('users');
+// Returns: App\Models\User::class
+```
+
+Or use the global helper:
+
+```php
+// Get model for guard
+$model = getModelForGuard('admin');
+```
+
+## Passport Client Credentials
+
+For Laravel Passport OAuth clients:
+
+```php config/permission.php
+'use_passport_client_credentials' => true,
+```
+
+This allows checking permissions on Passport clients:
+
+```php
+use Spatie\Permission\Guard;
+
+// Get Passport client
+$client = Guard::getPassportClient('api');
+
+if ($client && $client->hasPermissionTo('access-api')) {
+    // Client has permission
+}
+```
+
+## Database Structure
+
+Permissions and roles tables include a `guard_name` column:
+
+```sql
+CREATE TABLE permissions (
+    id BIGINT UNSIGNED PRIMARY KEY,
+    name VARCHAR(255),
+    guard_name VARCHAR(255),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE KEY permissions_name_guard_name_unique (name, guard_name)
+);
+
+CREATE TABLE roles (
+    id BIGINT UNSIGNED PRIMARY KEY,
+    name VARCHAR(255),
+    guard_name VARCHAR(255),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    UNIQUE KEY roles_name_guard_name_unique (name, guard_name)
+);
+```
+
+The unique constraint allows the same name with different guards.
+
+## Best Practices
+
+<Tip>
+  - Define `guard_name` property on models for clarity
+  - Use consistent guard names across your application
+  - Document which guards are used for which user types
+  - Test permission checks with multiple guards
+  - Consider using gate checks instead of direct permission checks for flexibility
+</Tip>

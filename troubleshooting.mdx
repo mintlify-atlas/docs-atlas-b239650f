@@ -1,0 +1,386 @@
+---
+title: Troubleshooting
+description: Common issues and solutions for Laravel Permission
+icon: "wrench"
+---
+
+## Common Issues
+
+This page covers the most frequently encountered issues and their solutions when working with Laravel Permission.
+
+<Accordion title="Permission/Role not found errors">
+
+### Problem
+You're getting errors like:
+- `There is no permission named 'edit articles' for guard 'web'.`
+- `There is no role named 'writer' for guard 'web'.`
+
+### Solutions
+
+1. **Verify the permission/role exists in the database**
+   ```bash
+   php artisan permission:show
+   ```
+
+2. **Check the guard name matches**
+   ```php
+   // Make sure the guard matches your config
+   $permission = Permission::create(['name' => 'edit articles', 'guard_name' => 'web']);
+   ```
+
+3. **Clear the cache after creating permissions**
+   ```bash
+   php artisan permission:cache-reset
+   ```
+
+</Accordion>
+
+<Accordion title="Guard does not match errors">
+
+### Problem
+`The given role or permission should use guard 'web' instead of 'api'.`
+
+### Solution
+
+Ensure all your permissions, roles, and users use the same guard:
+
+```php
+// When creating permissions/roles
+$permission = Permission::create(['name' => 'edit articles', 'guard_name' => 'web']);
+$role = Role::create(['name' => 'writer', 'guard_name' => 'web']);
+
+// Or specify guard when assigning
+$user->assignRole('writer', 'web');
+$user->givePermissionTo('edit articles', 'web');
+```
+
+See the [Multiple Guards](/advanced-usage/multiple-guards) documentation for more details.
+
+</Accordion>
+
+<Accordion title="Permissions not updating immediately">
+
+### Problem
+You've updated permissions in the database but changes aren't reflected in your application.
+
+### Solutions
+
+1. **Reset the permission cache**
+   ```bash
+   php artisan permission:cache-reset
+   ```
+
+2. **If you modified the database directly, always clear cache**
+   ```php
+   app()->make(\Spatie\Permission\PermissionRegistrar::class)->forgetCachedPermissions();
+   ```
+
+3. **For Octane users, enable auto-reset in config**
+   ```php
+   // config/permission.php
+   'register_octane_reset_listener' => true,
+   ```
+
+</Accordion>
+
+<Accordion title="Unauthorized exceptions (403 errors)">
+
+### Problem
+`User does not have the right permissions.`
+
+### Debugging Steps
+
+1. **Check if user has the permission**
+   ```php
+   dd($user->getAllPermissions());
+   dd($user->roles);
+   ```
+
+2. **Verify middleware is configured correctly**
+   ```php
+   // In app/Http/Kernel.php (Laravel 10 and below)
+   protected $middlewareAliases = [
+       'role' => \Spatie\Permission\Middleware\RoleMiddleware::class,
+       'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
+   ];
+   ```
+
+3. **Check if HasRoles trait is applied**
+   ```php
+   use Spatie\Permission\Traits\HasRoles;
+
+   class User extends Authenticatable
+   {
+       use HasRoles;
+   }
+   ```
+
+</Accordion>
+
+<Accordion title="String '123' treated as permission name instead of ID">
+
+### Problem
+When passing permission IDs from forms, they're treated as strings and lookup fails.
+
+### Solution
+
+Convert string IDs to integers when working with UI forms:
+
+```php
+// Convert array of permission IDs from strings to integers
+$permissionIds = collect($validated['permission'])->map(fn($val) => (int)$val);
+
+$role->syncPermissions($permissionIds);
+```
+
+<Note>
+This is especially important in v6+ due to improved UUID/ULID support. String IDs are treated as names, not IDs.
+</Note>
+
+</Accordion>
+
+<Accordion title="Trait HasRoles not found">
+
+### Problem
+`Authorizable class 'App\Models\User' must use Spatie\Permission\Traits\HasRoles trait.`
+
+### Solution
+
+Add the trait to your User model:
+
+```php
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Spatie\Permission\Traits\HasRoles;
+
+class User extends Authenticatable
+{
+    use HasRoles;
+
+    // ... rest of your model
+}
+```
+
+</Accordion>
+
+<Accordion title="Database migration errors">
+
+### Problem
+- Index name too long errors on MySQL
+- Duplicate column errors
+
+### Solutions
+
+**For MySQL index errors:**
+```php
+// In the migration, shorten column lengths
+$table->string('name', 125); // instead of 255
+```
+
+Or use InnoDB with utf8mb4:
+```php
+Schema::create('permissions', function (Blueprint $table) {
+    $table->engine = 'InnoDB';
+    // ... rest of migration
+});
+```
+
+**For duplicate column errors:**
+Check if you've already run the migrations:
+```bash
+php artisan migrate:status
+```
+
+</Accordion>
+
+<Accordion title="Cache issues with Redis/Memcached">
+
+### Problem
+Permissions are being shared between different applications or tenants.
+
+### Solution
+
+Set a unique cache prefix for each application:
+
+```php
+// config/cache.php
+'prefix' => env('CACHE_PREFIX', 'myapp_cache'),
+```
+
+For multitenancy:
+```php
+// After switching tenants
+app()->make(\Spatie\Permission\PermissionRegistrar::class)->initializeCache();
+```
+
+</Accordion>
+
+<Accordion title="Wildcard permissions not working">
+
+### Problem
+Wildcard permissions like `articles.*` are not matching `articles.edit`.
+
+### Solution
+
+1. **Enable wildcard permissions in config**
+   ```php
+   // config/permission.php
+   'enable_wildcard_permission' => true,
+   ```
+
+2. **Clear cache after enabling**
+   ```bash
+   php artisan permission:cache-reset
+   ```
+
+3. **Verify wildcard syntax**
+   ```php
+   $user->givePermissionTo('articles.*');
+   $user->can('articles.edit'); // true
+   ```
+
+See [Wildcard Permissions](/advanced-usage/wildcard-permissions) for more details.
+
+</Accordion>
+
+<Accordion title="Teams feature not working">
+
+### Problem
+Permissions are bleeding across teams or not respecting team boundaries.
+
+### Solutions
+
+1. **Ensure you've run the teams migration**
+   ```bash
+   php artisan permission:upgrade-teams
+   ```
+
+2. **Set the team ID in your middleware**
+   ```php
+   setPermissionsTeamId($team->id);
+   ```
+
+3. **Configure team resolver in config**
+   ```php
+   // config/permission.php
+   'teams' => true,
+   ```
+
+See [Teams Permissions](/advanced-usage/teams-permissions) for detailed setup.
+
+</Accordion>
+
+## Database & Cache Issues
+
+<Warning>
+**Database Cache Store Users**: If you're using `CACHE_STORE=database`, you must install Laravel's cache tables first:
+
+```bash
+php artisan cache:table
+php artisan migrate
+```
+
+Without these tables, you'll encounter errors like `Call to a member function perform() on null`.
+</Warning>
+
+<Note>
+**File Cache Permissions**: If using the `file` cache driver and having trouble clearing cache, check filesystem permissions. The PHP CLI user must have write access to cache files.
+</Note>
+
+## Migration Errors
+
+### Config Error During Migration
+
+If you get an error about accessing static properties during migration:
+
+```
+Error: Access to undeclared static property Spatie\Permission\PermissionRegistrar::$pivotPermission
+```
+
+**Solution**: Your migration file needs upgrading. The package now uses instance methods instead of static properties.
+
+<Steps>
+
+<Step title="Backup your current migration">
+Make a copy of your existing migration file.
+</Step>
+
+<Step title="Re-publish the migration">
+```bash
+php artisan vendor:publish --tag=permission-migrations --force
+```
+</Step>
+
+<Step title="Compare and merge customizations">
+If you had customizations (like UUID support or shortened column lengths), re-apply them to the new migration.
+</Step>
+
+</Steps>
+
+## Performance Issues
+
+<Accordion title="Too many database queries">
+
+### Problem
+Seeing N+1 queries when checking permissions.
+
+### Solution
+
+Eager load relationships:
+
+```php
+// Load roles and permissions with users
+$users = User::with('roles.permissions')->get();
+
+// For a single user
+$user->load('roles.permissions');
+```
+
+The package automatically caches permissions, but eager loading prevents multiple queries during a request.
+
+</Accordion>
+
+## Testing Issues
+
+<Accordion title="Permissions not working in tests">
+
+### Problem
+Permissions work in your application but fail in tests.
+
+### Solution
+
+1. **Clear cache in tests**
+   ```php
+   public function setUp(): void
+   {
+       parent::setUp();
+       app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
+   }
+   ```
+
+2. **Create permissions in your test setup**
+   ```php
+   Permission::create(['name' => 'edit articles']);
+   Role::create(['name' => 'writer'])
+       ->givePermissionTo('edit articles');
+   ```
+
+See [Testing](/best-practices/testing) for more details.
+
+</Accordion>
+
+## Still Having Issues?
+
+If you're still experiencing problems:
+
+1. Check the [GitHub Issues](https://github.com/spatie/laravel-permission/issues) for similar problems
+2. Review the [Changelog](/changelog) for recent changes
+3. [Create a new issue](https://github.com/spatie/laravel-permission/issues/new) with:
+   - Your Laravel version
+   - Package version
+   - PHP version
+   - Complete error message
+   - Relevant code snippets
+
+<Warning>
+For security-related bugs, email [security@spatie.be](mailto:security@spatie.be) instead of creating a public issue.
+</Warning>

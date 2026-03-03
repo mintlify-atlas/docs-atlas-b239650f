@@ -1,0 +1,493 @@
+---
+title: Artisan Commands
+description: Complete reference for all Laravel Permission artisan commands
+icon: terminal
+---
+
+Laravel Permission provides several artisan commands to manage permissions, roles, and cache. This guide documents every available command with examples.
+
+## Available Commands
+
+| Command | Purpose |
+|---------|----------|
+| `permission:create-permission` | Create a new permission |
+| `permission:create-role` | Create a new role with optional permissions |
+| `permission:assign-role` | Assign a role to a user |
+| `permission:show` | Display all roles and permissions |
+| `permission:cache-reset` | Clear the permission cache |
+| `permission:setup-teams` | Setup teams feature migration |
+
+## Creating Permissions
+
+### permission:create-permission
+
+Create a new permission in the database.
+
+```bash
+php artisan permission:create-permission {name} {guard?}
+```
+
+**Arguments:**
+
+<ParamField path="name" type="string" required>
+  The name of the permission to create
+</ParamField>
+
+<ParamField path="guard" type="string">
+  The guard name (defaults to your default guard)
+</ParamField>
+
+**Examples:**
+
+```bash
+# Create a basic permission
+php artisan permission:create-permission "edit articles"
+
+# Create permission for specific guard
+php artisan permission:create-permission "edit articles" api
+
+# Create permission for admin guard
+php artisan permission:create-permission "manage users" admin
+```
+
+**Output:**
+```
+Permission `edit articles` created
+```
+
+If the permission already exists:
+```
+Permission `edit articles` already exists
+```
+
+<Note>
+This command uses `findOrCreate()`, so it won't fail if the permission already exists.
+</Note>
+
+## Creating Roles
+
+### permission:create-role
+
+Create a new role and optionally assign permissions to it.
+
+```bash
+php artisan permission:create-role {name} {guard?} {permissions?} {--team-id=}
+```
+
+**Arguments:**
+
+<ParamField path="name" type="string" required>
+  The name of the role to create
+</ParamField>
+
+<ParamField path="guard" type="string">
+  The guard name (defaults to your default guard)
+</ParamField>
+
+<ParamField path="permissions" type="string">
+  A list of permissions to assign, separated by pipe (`|`)
+</ParamField>
+
+**Options:**
+
+<ParamField path="--team-id" type="integer">
+  The team ID (only works when teams feature is enabled)
+</ParamField>
+
+**Examples:**
+
+```bash
+# Create a basic role
+php artisan permission:create-role admin
+
+# Create role with permissions
+php artisan permission:create-role editor web "edit articles|publish articles|delete articles"
+
+# Create role for specific guard
+php artisan permission:create-role "api-admin" api
+
+# Create team-specific role (requires teams feature enabled)
+php artisan permission:create-role "team-admin" web "manage team" --team-id=5
+```
+
+**Output:**
+```
+Role `editor` created
+```
+
+If the role already exists:
+```
+Role `editor` updated
+```
+
+<Warning>
+If teams are disabled but you pass `--team-id`, you'll see:
+```
+Teams feature disabled, argument --team-id has no effect. Either enable it in permissions config file or remove --team-id parameter
+```
+</Warning>
+
+## Assigning Roles
+
+### permission:assign-role
+
+Assign a role to a user.
+
+```bash
+php artisan permission:assign-role {name} {userId} {guard?} {userModelNamespace?} {--team-id=}
+```
+
+**Arguments:**
+
+<ParamField path="name" type="string" required>
+  The name of the role to assign
+</ParamField>
+
+<ParamField path="userId" type="integer" required>
+  The ID of the user to assign the role to
+</ParamField>
+
+<ParamField path="guard" type="string">
+  The guard name (defaults to your default guard)
+</ParamField>
+
+<ParamField path="userModelNamespace" type="string" default="App\Models\User">
+  The fully qualified class name of the user model
+</ParamField>
+
+**Options:**
+
+<ParamField path="--team-id" type="integer">
+  The team ID (only works when teams feature is enabled)
+</ParamField>
+
+**Examples:**
+
+```bash
+# Assign role to user
+php artisan permission:assign-role admin 123
+
+# Assign role with specific guard
+php artisan permission:assign-role editor 456 web
+
+# Assign role with custom user model
+php artisan permission:assign-role manager 789 web App\\Models\\Admin
+
+# Assign team-specific role
+php artisan permission:assign-role "team-lead" 123 web App\\Models\\User --team-id=5
+```
+
+**Output:**
+```
+Role `admin` assigned to user ID 123 successfully.
+```
+
+**Error Cases:**
+
+If user model doesn't exist:
+```
+User model class [App\Models\Admin] does not exist.
+```
+
+If user not found:
+```
+User with ID 999 not found.
+```
+
+If teams disabled with `--team-id`:
+```
+Teams feature disabled, argument --team-id has no effect. Either enable it in permissions config file or remove --team-id parameter
+```
+
+## Viewing Permissions
+
+### permission:show
+
+Display a formatted table showing all roles and permissions for each guard.
+
+```bash
+php artisan permission:show {guard?} {style?}
+```
+
+**Arguments:**
+
+<ParamField path="guard" type="string">
+  Filter by specific guard (shows all guards if omitted)
+</ParamField>
+
+<ParamField path="style" type="string">
+  Table display style: `default`, `borderless`, `compact`, or `box`
+</ParamField>
+
+**Examples:**
+
+```bash
+# Show all permissions and roles
+php artisan permission:show
+
+# Show only web guard
+php artisan permission:show web
+
+# Show with compact style
+php artisan permission:show web compact
+
+# Show with box style
+php artisan permission:show web box
+```
+
+**Output Example:**
+
+```
+Guard: web
++-----------------+-------+---------+--------+
+|                 | admin | editor  | viewer |
++-----------------+-------+---------+--------+
+| edit articles   |   ✔   |    ✔    |   ·    |
+| delete articles |   ✔   |    ·    |   ·    |
+| view articles   |   ✔   |    ✔    |   ✔    |
+| manage users    |   ✔   |    ·    |   ·    |
++-----------------+-------+---------+--------+
+```
+
+**With Teams Enabled:**
+
+```
+Guard: web
++------------------+-------+-------+--------+--------+
+|                  |   Team ID: 1  | Team ID: 2     |
++------------------+-------+-------+--------+--------+
+|                  | admin | editor| admin  | viewer |
++------------------+-------+-------+--------+--------+
+| edit articles    |   ✔   |   ✔   |   ✔    |   ·    |
+| delete articles  |   ✔   |   ·   |   ✔    |   ·    |
++------------------+-------+-------+--------+--------+
+```
+
+<Note>
+This command is extremely useful for:
+- Auditing your permission structure
+- Debugging permission issues
+- Documenting your application's access control
+</Note>
+
+## Cache Management
+
+### permission:cache-reset
+
+Clear the permission cache. The package automatically caches permissions for performance, but you may need to manually clear the cache in some scenarios.
+
+```bash
+php artisan permission:cache-reset
+```
+
+**No arguments or options required.**
+
+**Output:**
+```
+Permission cache flushed.
+```
+
+**When to Use:**
+
+<Steps>
+  <Step title="After direct database changes">
+    If you modify permission tables directly in the database without using the package's models
+  </Step>
+  
+  <Step title="After config changes">
+    When you change cache-related settings in `config/permission.php`
+  </Step>
+  
+  <Step title="Troubleshooting">
+    When permissions aren't behaving as expected and you suspect caching issues
+  </Step>
+  
+  <Step title="Deployment">
+    Consider running this command as part of your deployment process
+  </Step>
+</Steps>
+
+<Note>
+The cache is automatically cleared when you create, update, or delete permissions/roles through the package's models. Manual clearing is only needed for direct database modifications or troubleshooting.
+</Note>
+
+## Teams Setup
+
+### permission:setup-teams
+
+Generate the migration needed to add teams support to an existing Laravel Permission installation.
+
+```bash
+php artisan permission:setup-teams
+```
+
+**No arguments or options required.**
+
+**Prerequisites:**
+
+The `teams` option must be enabled in `config/permission.php`:
+
+```php
+'teams' => true,
+```
+
+**Interactive Process:**
+
+```
+The teams feature setup is going to add a migration and a model
+
+Proceed with the migration creation? (yes/no) [yes]:
+> yes
+
+Creating migration
+Migration created successfully.
+```
+
+**What It Does:**
+
+<Steps>
+  <Step title="Checks configuration">
+    Verifies that teams are enabled in your config
+  </Step>
+  
+  <Step title="Checks for existing migrations">
+    Warns if the teams migration already exists
+  </Step>
+  
+  <Step title="Creates migration">
+    Generates a timestamped migration file in `database/migrations/`
+  </Step>
+</Steps>
+
+**Generated Migration:**
+
+The migration adds `team_id` columns and updates indexes on:
+- `roles` table
+- `model_has_permissions` table
+- `model_has_roles` table
+
+**After Running This Command:**
+
+```bash
+# Review the generated migration
+cat database/migrations/*_add_teams_fields.php
+
+# Run the migration
+php artisan migrate
+
+# Clear caches
+php artisan permission:cache-reset
+php artisan config:clear
+```
+
+**Error Cases:**
+
+If teams are disabled:
+```
+Teams feature is disabled in your permission.php file.
+Please enable the teams setting in your configuration.
+```
+
+If migration already exists:
+```
+Setup teams migration already exists.
+Following file was found:
+ - 2024_01_15_123456_add_teams_fields.php
+```
+
+<Warning>
+Backup your database before running the teams migration on a production system.
+</Warning>
+
+## Command Chaining Examples
+
+You can combine these commands to quickly set up your permission structure:
+
+```bash
+# Setup a complete role with permissions
+php artisan permission:create-permission "edit articles"
+php artisan permission:create-permission "delete articles"
+php artisan permission:create-permission "publish articles"
+php artisan permission:create-role editor web "edit articles|publish articles"
+php artisan permission:assign-role editor 123
+
+# Verify the setup
+php artisan permission:show
+```
+
+Or use a shell script:
+
+```bash setup-permissions.sh
+#!/bin/bash
+
+# Create permissions
+php artisan permission:create-permission "view dashboard"
+php artisan permission:create-permission "edit articles"
+php artisan permission:create-permission "delete articles"
+php artisan permission:create-permission "manage users"
+
+# Create roles
+php artisan permission:create-role admin web "view dashboard|edit articles|delete articles|manage users"
+php artisan permission:create-role editor web "view dashboard|edit articles"
+php artisan permission:create-role viewer web "view dashboard"
+
+# Show results
+php artisan permission:show
+```
+
+## Using Commands in Seeders
+
+You can call these commands from your database seeders:
+
+```php database/seeders/RolePermissionSeeder.php
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
+
+class RolePermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        // Create permissions
+        Artisan::call('permission:create-permission', ['name' => 'edit articles']);
+        Artisan::call('permission:create-permission', ['name' => 'delete articles']);
+        
+        // Create role with permissions
+        Artisan::call('permission:create-role', [
+            'name' => 'editor',
+            'permissions' => 'edit articles|delete articles',
+        ]);
+        
+        $this->command->info('Roles and permissions created!');
+    }
+}
+```
+
+<Note>
+While you can use artisan commands in seeders, it's generally better to use the package's models directly for more control and better error handling.
+</Note>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use commands in development">
+    These commands are perfect for quickly testing permission structures during development
+  </Step>
+  
+  <Step title="Automate with seeders">
+    For production deployments, prefer using seeders with the package's models
+  </Step>
+  
+  <Step title="Clear cache after changes">
+    Always run `permission:cache-reset` after making direct database changes
+  </Step>
+  
+  <Step title="Document your permission structure">
+    Use `permission:show` output to document your application's access control
+  </Step>
+  
+  <Step title="Script common operations">
+    Create shell scripts for common permission setup tasks
+  </Step>
+</Steps>

@@ -1,0 +1,515 @@
+---
+title: 'HasRoles Trait'
+description: 'Complete API reference for the HasRoles trait'
+---
+
+The `HasRoles` trait provides role management functionality to your models. This trait is automatically included when you use the package and allows models to be assigned roles.
+
+## Namespace
+
+```php
+Spatie\Permission\Traits\HasRoles
+```
+
+## Relationships
+
+### roles()
+
+Define the many-to-many relationship between the model and roles.
+
+```php
+public function roles(): BelongsToMany
+```
+
+**Returns:** `Illuminate\Database\Eloquent\Relations\BelongsToMany`
+
+**Description:** Returns the eloquent relationship for roles. Automatically handles team-based permissions if enabled.
+
+**Example:**
+```php
+$user->roles; // Collection of roles
+$user->roles()->where('name', 'admin')->first();
+```
+
+---
+
+## Query Scopes
+
+### scopeRole()
+
+Scope the model query to certain roles only.
+
+```php
+public function scopeRole(
+    Builder $query,
+    string|int|array|Role|Collection|BackedEnum $roles,
+    ?string $guard = null,
+    bool $without = false
+): Builder
+```
+
+<ParamField path="query" type="Builder" required>
+  The query builder instance
+</ParamField>
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to filter by. Can be:
+  - Role name (string)
+  - Role ID (int)
+  - Role model instance
+  - Array of any of the above
+  - Collection of roles
+  - BackedEnum
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to use for role lookup
+</ParamField>
+
+<ParamField path="without" type="bool" default="false">
+  If true, returns models WITHOUT the specified roles
+</ParamField>
+
+**Returns:** `Illuminate\Database\Eloquent\Builder`
+
+**Example:**
+```php
+// Get users with 'admin' role
+$admins = User::role('admin')->get();
+
+// Get users with multiple roles
+$users = User::role(['admin', 'editor'])->get();
+
+// Get users with role in specific guard
+$users = User::role('admin', 'api')->get();
+```
+
+---
+
+### scopeWithoutRole()
+
+Scope the model query to only those without certain roles.
+
+```php
+public function scopeWithoutRole(
+    Builder $query,
+    string|int|array|Role|Collection|BackedEnum $roles,
+    ?string $guard = null
+): Builder
+```
+
+<ParamField path="query" type="Builder" required>
+  The query builder instance
+</ParamField>
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to exclude
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to use for role lookup
+</ParamField>
+
+**Returns:** `Illuminate\Database\Eloquent\Builder`
+
+**Example:**
+```php
+// Get all users except admins
+$users = User::withoutRole('admin')->get();
+
+// Get users without multiple roles
+$users = User::withoutRole(['admin', 'super-admin'])->get();
+```
+
+---
+
+## Role Assignment
+
+### assignRole()
+
+Assign the given role(s) to the model.
+
+```php
+public function assignRole(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): static
+```
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to assign. Accepts variadic arguments. Can be:
+  - Role name (string)
+  - Role ID (int)
+  - Role model instance
+  - Array of any of the above
+  - Collection of roles
+  - BackedEnum
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Events:** Fires `RoleAttachedEvent` if events are enabled
+
+**Example:**
+```php
+// Assign single role
+$user->assignRole('admin');
+
+// Assign multiple roles
+$user->assignRole('admin', 'editor');
+$user->assignRole(['admin', 'editor']);
+
+// Assign role by ID
+$user->assignRole(1);
+
+// Assign role model
+$role = Role::findByName('admin');
+$user->assignRole($role);
+
+// Method chaining
+$user->assignRole('admin')->save();
+```
+
+---
+
+### removeRole()
+
+Revoke the given role(s) from the model.
+
+```php
+public function removeRole(
+    string|int|array|Role|Collection|BackedEnum ...$role
+): static
+```
+
+<ParamField path="role" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to remove. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Events:** Fires `RoleDetachedEvent` if events are enabled
+
+**Example:**
+```php
+// Remove single role
+$user->removeRole('admin');
+
+// Remove multiple roles
+$user->removeRole('admin', 'editor');
+$user->removeRole(['admin', 'editor']);
+```
+
+---
+
+### syncRoles()
+
+Remove all current roles and set the given ones.
+
+```php
+public function syncRoles(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): static
+```
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to sync. All existing roles will be removed first. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `static` (the model instance for method chaining)
+
+**Events:** Fires `RoleDetachedEvent` for removed roles and `RoleAttachedEvent` for new roles if events are enabled
+
+**Example:**
+```php
+// Replace all roles with 'admin'
+$user->syncRoles('admin');
+
+// Replace all roles with multiple roles
+$user->syncRoles(['admin', 'editor']);
+$user->syncRoles('admin', 'editor');
+
+// Remove all roles
+$user->syncRoles([]);
+```
+
+---
+
+## Role Checking
+
+### hasRole()
+
+Determine if the model has (one of) the given role(s).
+
+```php
+public function hasRole(
+    string|int|array|Role|Collection|BackedEnum $roles,
+    ?string $guard = null
+): bool
+```
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to check. Can be:
+  - Role name (string)
+  - Role ID (int)
+  - Role model instance
+  - Array of any of the above
+  - Collection of roles
+  - BackedEnum
+  - Pipe-separated string (e.g., 'admin|editor')
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to check against
+</ParamField>
+
+**Returns:** `bool` - Returns `true` if the model has ANY of the given roles
+
+**Example:**
+```php
+// Check single role
+$user->hasRole('admin'); // true or false
+
+// Check multiple roles (returns true if user has ANY)
+$user->hasRole(['admin', 'editor']);
+$user->hasRole('admin|editor'); // pipe-separated
+
+// Check role in specific guard
+$user->hasRole('admin', 'api');
+
+// Check role by ID
+$user->hasRole(1);
+```
+
+---
+
+### hasAnyRole()
+
+Determine if the model has any of the given role(s). Alias to `hasRole()` but without guard controls.
+
+```php
+public function hasAnyRole(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): bool
+```
+
+<ParamField path="roles" type="string|int|array|Role|Collection|BackedEnum" required>
+  The role(s) to check. Accepts variadic arguments.
+</ParamField>
+
+**Returns:** `bool` - Returns `true` if the model has ANY of the given roles
+
+**Example:**
+```php
+$user->hasAnyRole('admin', 'editor');
+$user->hasAnyRole(['admin', 'editor']);
+```
+
+---
+
+### hasAllRoles()
+
+Determine if the model has all of the given role(s).
+
+```php
+public function hasAllRoles(
+    string|array|Role|Collection|BackedEnum $roles,
+    ?string $guard = null
+): bool
+```
+
+<ParamField path="roles" type="string|array|Role|Collection|BackedEnum" required>
+  The role(s) to check. Can be:
+  - Role name (string)
+  - Role model instance
+  - Array of role names or models
+  - Collection of roles
+  - BackedEnum
+  - Pipe-separated string (e.g., 'admin|editor')
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to check against
+</ParamField>
+
+**Returns:** `bool` - Returns `true` only if the model has ALL of the given roles
+
+**Example:**
+```php
+// Check if user has all roles
+$user->hasAllRoles(['admin', 'editor']); // true only if has both
+$user->hasAllRoles('admin|editor'); // pipe-separated
+
+// Check in specific guard
+$user->hasAllRoles(['admin', 'editor'], 'api');
+```
+
+---
+
+### hasExactRoles()
+
+Determine if the model has exactly all of the given role(s) and no others.
+
+```php
+public function hasExactRoles(
+    string|array|Role|Collection|BackedEnum $roles,
+    ?string $guard = null
+): bool
+```
+
+<ParamField path="roles" type="string|array|Role|Collection|BackedEnum" required>
+  The exact role(s) the model should have
+</ParamField>
+
+<ParamField path="guard" type="string|null" default="null">
+  The guard name to check against
+</ParamField>
+
+**Returns:** `bool` - Returns `true` only if the model has exactly these roles, no more, no less
+
+**Example:**
+```php
+// User with roles ['admin', 'editor']
+$user->hasExactRoles(['admin', 'editor']); // true
+$user->hasExactRoles(['admin']); // false (has more roles)
+$user->hasExactRoles(['admin', 'editor', 'writer']); // false (doesn't have all)
+```
+
+---
+
+## Helper Methods
+
+### getRoleClass()
+
+Get the fully qualified class name of the role model.
+
+```php
+public function getRoleClass(): string
+```
+
+**Returns:** `string` - The role model class name
+
+**Example:**
+```php
+$roleClass = $user->getRoleClass();
+// Returns: "App\\Models\\Role" or your configured role model
+```
+
+---
+
+### getRoleNames()
+
+Get a collection of role names assigned to the model.
+
+```php
+public function getRoleNames(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of role names (strings)
+
+**Example:**
+```php
+$roleNames = $user->getRoleNames();
+// Returns: Collection ['admin', 'editor']
+
+foreach ($user->getRoleNames() as $roleName) {
+    echo $roleName;
+}
+```
+
+---
+
+### getDirectPermissions()
+
+Return all permissions directly coupled to the model (not via roles).
+
+```php
+public function getDirectPermissions(): Collection
+```
+
+**Returns:** `Illuminate\Support\Collection` - Collection of permission models
+
+**Example:**
+```php
+$permissions = $user->getDirectPermissions();
+// Returns only permissions directly assigned to the user,
+// not those inherited from roles
+```
+
+---
+
+## Usage Examples
+
+### Basic Role Management
+
+```php
+$user = User::find(1);
+
+// Assign roles
+$user->assignRole('admin');
+$user->assignRole(['editor', 'writer']);
+
+// Check roles
+if ($user->hasRole('admin')) {
+    // User is an admin
+}
+
+if ($user->hasAnyRole(['admin', 'editor'])) {
+    // User has at least one of these roles
+}
+
+if ($user->hasAllRoles(['admin', 'editor'])) {
+    // User has both roles
+}
+
+// Remove roles
+$user->removeRole('editor');
+
+// Sync roles (removes all others)
+$user->syncRoles(['admin']);
+```
+
+### Query by Roles
+
+```php
+// Get all admins
+$admins = User::role('admin')->get();
+
+// Get users with multiple roles
+$privileged = User::role(['admin', 'super-admin'])->get();
+
+// Get non-admin users
+$regularUsers = User::withoutRole('admin')->get();
+
+// Combine with other queries
+$activeAdmins = User::role('admin')
+    ->where('status', 'active')
+    ->orderBy('name')
+    ->get();
+```
+
+### Working with Role Models
+
+```php
+// Get role models
+$roles = $user->roles;
+
+// Get specific role relationship data
+$adminRole = $user->roles()->where('name', 'admin')->first();
+
+// Count roles
+$roleCount = $user->roles()->count();
+
+// Check if relationship is loaded
+if ($user->relationLoaded('roles')) {
+    // Roles are already loaded
+}
+```
+
+---
+
+## See Also
+
+- [HasPermissions Trait](/api/traits/has-permissions) - Permission management methods
+- [Role Model](/api/models/role) - Role model API reference
+- [Using Roles](/basic-usage/using-roles) - Detailed guide on role management
+- [Checking Permissions](/basic-usage/checking-permissions) - Guide on checking roles and permissions

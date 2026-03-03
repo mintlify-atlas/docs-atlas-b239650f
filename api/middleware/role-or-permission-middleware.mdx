@@ -1,0 +1,318 @@
+---
+title: RoleOrPermissionMiddleware
+description: Middleware to protect routes requiring either specific roles or permissions
+---
+
+## Overview
+
+The `RoleOrPermissionMiddleware` class provides flexible route protection by checking if the authenticated user has either the specified roles OR the specified permissions. This allows for more versatile access control where either role-based or permission-based access grants entry.
+
+**Namespace:** `Spatie\Permission\Middleware\RoleOrPermissionMiddleware`
+
+## Registration
+
+Register the middleware in your `bootstrap/app.php` file:
+
+```php
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->alias([
+        'role_or_permission' => RoleOrPermissionMiddleware::class,
+    ]);
+})
+```
+
+## Methods
+
+### handle()
+
+Handles the incoming request and verifies the user has the required role(s) or permission(s).
+
+```php
+public function handle(
+    Request $request, 
+    Closure $next, 
+    $roleOrPermission, 
+    ?string $guard = null
+)
+```
+
+**Parameters:**
+- `$request` - The incoming HTTP request
+- `$next` - The next middleware closure
+- `$roleOrPermission` - Role or permission name(s) as string or pipe-separated values
+- `$guard` - Optional authentication guard name
+
+**Behavior:**
+1. Retrieves the authenticated user from the specified guard
+2. Supports Passport client credentials for machine-to-machine authentication
+3. Verifies the user has both `HasRoles` and `HasPermissions` traits
+4. Checks if the user has any of the specified values as either permissions OR roles (using pipe `|` as separator)
+5. Throws `UnauthorizedException` if user is not logged in, missing the traits, or lacks required roles/permissions
+
+**Exceptions:**
+- `UnauthorizedException::notLoggedIn()` - User is not authenticated
+- `UnauthorizedException::missingTraitHasRoles($user)` - User model lacks `HasRoles` trait
+- `UnauthorizedException::forRolesOrPermissions($rolesOrPermissions)` - User lacks any of the required roles or permissions
+
+### using()
+
+Helper method to programmatically specify roles/permissions and guard for the middleware.
+
+```php
+public static function using(
+    array|string|BackedEnum $roleOrPermission, 
+    ?string $guard = null
+): string
+```
+
+**Parameters:**
+- `$roleOrPermission` - Role or permission name(s) as string, array, or BackedEnum
+- `$guard` - Optional authentication guard name
+
+**Returns:** String representing the middleware with parameters
+
+**Example:**
+```php
+RoleOrPermissionMiddleware::using('admin')
+RoleOrPermissionMiddleware::using(['admin', 'edit posts'])
+RoleOrPermissionMiddleware::using('admin', 'api')
+```
+
+## Usage Examples
+
+### Single Role or Permission
+
+Allow access if user has either the role or permission:
+
+```php
+// User can access if they have 'admin' role OR 'admin' permission
+Route::get('/admin/dashboard', function () {
+    return 'Admin Dashboard';
+})->middleware('role_or_permission:admin');
+```
+
+### Multiple Values (OR Logic)
+
+Allow access if user has ANY of the specified roles or permissions:
+
+```php
+// User can access if they have 'editor' role, 'admin' role, OR 'edit posts' permission
+Route::get('/posts/edit', function () {
+    return 'Edit Posts';
+})->middleware('role_or_permission:editor|admin|edit posts');
+```
+
+### Flexible Access Control
+
+Combine roles and permissions for versatile authorization:
+
+```php
+// Admins OR anyone with specific permission can access
+Route::delete('/posts/{id}', function ($id) {
+    return 'Delete Post';
+})->middleware('role_or_permission:admin|delete posts');
+
+// Multiple roles OR a specific permission
+Route::get('/content/manage', function () {
+    return 'Manage Content';
+})->middleware('role_or_permission:admin|editor|manage content');
+```
+
+### With Custom Guard
+
+Specify a custom authentication guard:
+
+```php
+Route::get('/api/admin', function () {
+    return 'API Admin';
+})->middleware('role_or_permission:admin,api');
+```
+
+### Using the using() Method
+
+Programmatically specify roles or permissions:
+
+```php
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+
+Route::get('/dashboard', function () {
+    return 'Dashboard';
+})->middleware(RoleOrPermissionMiddleware::using('admin'));
+
+// Multiple values
+Route::get('/content', function () {
+    return 'Content';
+})->middleware(RoleOrPermissionMiddleware::using(['admin', 'editor', 'edit posts']));
+
+// With guard
+Route::get('/api/content', function () {
+    return 'API Content';
+})->middleware(RoleOrPermissionMiddleware::using('admin', 'api'));
+```
+
+### Route Groups
+
+Apply to multiple routes:
+
+```php
+Route::middleware(['role_or_permission:admin|manage posts'])->group(function () {
+    Route::get('/posts', [PostController::class, 'index']);
+    Route::post('/posts', [PostController::class, 'store']);
+    Route::put('/posts/{id}', [PostController::class, 'update']);
+    Route::delete('/posts/{id}', [PostController::class, 'destroy']);
+});
+```
+
+### With BackedEnum
+
+Use PHP enums for type-safe definitions:
+
+```php
+enum UserRole: string
+{
+    case ADMIN = 'admin';
+    case EDITOR = 'editor';
+}
+
+enum PostPermission: string
+{
+    case EDIT = 'edit posts';
+    case DELETE = 'delete posts';
+}
+
+// Single enum
+Route::get('/admin', function () {
+    return 'Admin Area';
+})->middleware(RoleOrPermissionMiddleware::using(UserRole::ADMIN));
+
+// Mixed enums
+Route::get('/posts/manage', function () {
+    return 'Manage Posts';
+})->middleware(RoleOrPermissionMiddleware::using([
+    UserRole::ADMIN, 
+    UserRole::EDITOR,
+    PostPermission::EDIT
+]));
+```
+
+### Controller Usage
+
+Apply in controller constructors:
+
+```php
+class PostController extends Controller
+{
+    public function __construct()
+    {
+        // Admin role OR manage posts permission
+        $this->middleware('role_or_permission:admin|manage posts');
+    }
+    
+    // Or specific methods
+    public function __construct()
+    {
+        $this->middleware('role_or_permission:admin|delete posts')
+            ->only(['destroy']);
+        $this->middleware('role_or_permission:editor|admin|edit posts')
+            ->only(['edit', 'update']);
+    }
+}
+```
+
+### Practical Use Cases
+
+#### Super Admin Bypass
+
+Allow super admins to bypass specific permission checks:
+
+```php
+// Super admins OR users with specific permission can access
+Route::post('/settings/update', function () {
+    return 'Update Settings';
+})->middleware('role_or_permission:super-admin|update settings');
+```
+
+#### Role-Based with Permission Override
+
+Grant access to specific roles, but also allow individual permission grants:
+
+```php
+// Managers and admins, OR anyone granted the specific permission
+Route::get('/reports/financial', function () {
+    return 'Financial Reports';
+})->middleware('role_or_permission:manager|admin|view financial reports');
+```
+
+#### Temporary Access
+
+Grant temporary permissions without changing roles:
+
+```php
+// Editors normally have access, but can grant temporary permission to others
+Route::post('/articles/publish', function () {
+    return 'Publish Article';
+})->middleware('role_or_permission:editor|publish articles');
+```
+
+## Passport Client Credentials
+
+The middleware supports Laravel Passport machine-to-machine authentication. When `permission.use_passport_client_credentials` is enabled in config, the middleware will authenticate Passport clients using bearer tokens.
+
+```php
+// config/permission.php
+'use_passport_client_credentials' => true,
+```
+
+## Combining with Other Middleware
+
+Combine with other middleware for enhanced security:
+
+```php
+// Require authentication AND (role OR permission)
+Route::get('/content', [ContentController::class, 'index'])
+    ->middleware(['auth', 'role_or_permission:admin|view content']);
+
+// Require verification AND (role OR permission)
+Route::post('/posts', [PostController::class, 'store'])
+    ->middleware(['auth', 'verified', 'role_or_permission:editor|create posts']);
+```
+
+## Difference from Other Middleware
+
+### vs RoleMiddleware
+
+- **RoleMiddleware**: Checks ONLY roles
+- **RoleOrPermissionMiddleware**: Checks both roles AND permissions (OR logic)
+
+```php
+// RoleMiddleware - user must have 'admin' role
+->middleware('role:admin')
+
+// RoleOrPermissionMiddleware - user can have 'admin' role OR 'admin' permission
+->middleware('role_or_permission:admin')
+```
+
+### vs PermissionMiddleware
+
+- **PermissionMiddleware**: Checks ONLY permissions
+- **RoleOrPermissionMiddleware**: Checks both roles AND permissions (OR logic)
+
+```php
+// PermissionMiddleware - user must have 'edit posts' permission
+->middleware('permission:edit posts')
+
+// RoleOrPermissionMiddleware - user can have 'editor' role OR 'edit posts' permission
+->middleware('role_or_permission:editor|edit posts')
+```
+
+## Notes
+
+- The pipe character (`|`) separates multiple values, implementing OR logic
+- User must have at least ONE of the specified values as either a role or permission
+- The middleware requires the user model to use the `HasRoles` trait
+- Checks both `canAny()` for permissions and `hasAnyRole()` for roles
+- More flexible than using separate role or permission middleware
+- Particularly useful when you want to grant access by role hierarchy OR specific permissions
+- Both `hasAnyRole` and `hasAnyPermission` methods must exist on the user model

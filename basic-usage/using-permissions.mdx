@@ -1,0 +1,211 @@
+---
+title: 'Using Permissions'
+description: 'Learn how to create and manage permissions in Laravel Permission'
+---
+
+Permissions are the foundation of the role-permission system. Each permission represents a specific action or capability in your application.
+
+## Creating Permissions
+
+There are several ways to create permissions in Laravel Permission.
+
+<Tabs>
+  <Tab title="Using create()">
+    The most common way to create a permission:
+
+    ```php
+    use Spatie\Permission\Models\Permission;
+
+    Permission::create(['name' => 'edit articles']);
+    ```
+
+    <Note>
+      The `guard_name` is automatically set to your default guard if not specified.
+    </Note>
+  </Tab>
+
+  <Tab title="Specifying Guard">
+    Create a permission for a specific guard:
+
+    ```php
+    Permission::create([
+        'name' => 'edit articles',
+        'guard_name' => 'api'
+    ]);
+    ```
+
+    <Tip>
+      Guards allow you to use different authentication systems. The default guard is `web`.
+    </Tip>
+  </Tab>
+
+  <Tab title="Using findOrCreate()">
+    Create a permission only if it doesn't exist:
+
+    ```php
+    // Returns existing permission or creates a new one
+    $permission = Permission::findOrCreate('edit articles');
+
+    // With custom guard
+    $permission = Permission::findOrCreate('edit articles', 'api');
+    ```
+  </Tab>
+</Tabs>
+
+## Finding Permissions
+
+Retrieve existing permissions using various lookup methods.
+
+<Steps>
+  <Step title="Find by Name">
+    The most common way to retrieve a permission:
+
+    ```php
+    $permission = Permission::findByName('edit articles');
+
+    // With specific guard
+    $permission = Permission::findByName('edit articles', 'api');
+    ```
+
+    <Warning>
+      Throws `PermissionDoesNotExist` exception if the permission is not found.
+    </Warning>
+  </Step>
+
+  <Step title="Find by ID">
+    Retrieve a permission by its database ID:
+
+    ```php
+    $permission = Permission::findById(1);
+
+    // With specific guard
+    $permission = Permission::findById(1, 'api');
+    ```
+  </Step>
+
+  <Step title="Find or Create">
+    Safe method that returns existing permission or creates a new one:
+
+    ```php
+    // Never throws an exception
+    $permission = Permission::findOrCreate('edit articles');
+    ```
+  </Step>
+</Steps>
+
+## Permission Properties
+
+Each permission model has the following properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `id` | int\|string | Primary key |
+| `name` | string | Permission name (e.g., 'edit articles') |
+| `guard_name` | string | Authentication guard (e.g., 'web', 'api') |
+| `created_at` | Carbon | Creation timestamp |
+| `updated_at` | Carbon | Last update timestamp |
+
+## Permission Relationships
+
+Permissions have two main relationships:
+
+### Roles Relationship
+
+A permission can be assigned to multiple roles:
+
+```php
+// Get all roles that have this permission
+$permission = Permission::findByName('edit articles');
+$roles = $permission->roles; // Collection of Role models
+
+// Count roles with this permission
+$roleCount = $permission->roles()->count();
+```
+
+### Users Relationship
+
+A permission can be assigned directly to users:
+
+```php
+// Get all users with this permission (direct assignment)
+$permission = Permission::findByName('edit articles');
+$users = $permission->users; // Collection of User models
+
+// This only returns users with DIRECT permission assignment
+// It does not include users who have the permission via roles
+```
+
+## Deleting Permissions
+
+Remove permissions from the database:
+
+```php
+$permission = Permission::findByName('edit articles');
+$permission->delete();
+```
+
+<Warning>
+  When you delete a permission:
+  - It's automatically detached from all roles
+  - It's automatically detached from all users
+  - The permission cache is cleared
+</Warning>
+
+## Best Practices
+
+<Tip>
+  **Naming Convention**: Use lowercase with spaces or kebab-case for consistency:
+  - Good: `edit articles`, `delete-posts`, `view dashboard`
+  - Avoid: `EditArticles`, `DELETE_POSTS`
+</Tip>
+
+<Note>
+  **Seeders**: Create permissions in database seeders for consistent deployment across environments:
+
+  ```php
+  // database/seeders/PermissionSeeder.php
+  public function run()
+  {
+      $permissions = [
+          'edit articles',
+          'delete articles',
+          'publish articles',
+          'unpublish articles',
+      ];
+
+      foreach ($permissions as $permission) {
+          Permission::findOrCreate($permission);
+      }
+  }
+  ```
+</Note>
+
+## Guard-Specific Permissions
+
+When using multiple authentication guards, create separate permissions for each:
+
+```php
+// Web guard (for regular users)
+Permission::create(['name' => 'edit articles', 'guard_name' => 'web']);
+
+// API guard (for API authentication)
+Permission::create(['name' => 'edit articles', 'guard_name' => 'api']);
+
+// Admin guard (for admin panel)
+Permission::create(['name' => 'edit articles', 'guard_name' => 'admin']);
+```
+
+<Warning>
+  Permissions with the same name but different guards are treated as separate permissions.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Using Roles" icon="users" href="/basic-usage/using-roles">
+    Learn how to create and manage roles
+  </Card>
+  <Card title="Assigning Permissions" icon="user-check" href="/basic-usage/assigning-permissions">
+    Assign permissions to users and roles
+  </Card>
+</CardGroup>

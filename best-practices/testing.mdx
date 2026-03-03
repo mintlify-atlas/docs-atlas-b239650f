@@ -1,0 +1,567 @@
+---
+title: Testing Permissions
+description: Best practices for testing permissions and roles in your Laravel application
+---
+
+## Test Setup
+
+Always reset the permission cache before each test to ensure clean state.
+
+```php
+use Spatie\Permission\PermissionRegistrar;
+
+beforeEach(function () {
+    // Reset permission cache
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+    
+    // Create test user and permissions
+    $this->user = User::create(['email' => 'test@example.com']);
+    $this->permission = Permission::create(['name' => 'edit-articles']);
+    $this->role = Role::create(['name' => 'editor']);
+});
+```
+
+<Tip>
+Use Pest's `beforeEach()` or PHPUnit's `setUp()` to establish a consistent test environment:
+
+```php
+protected function setUp(): void
+{
+    parent::setUp();
+    
+    $this->artisan('permission:cache-reset');
+}
+```
+</Tip>
+
+## Testing Permission Assignment
+
+Verify permissions can be assigned and checked correctly.
+
+```php
+it('can assign a permission to a user', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $permission = Permission::create(['name' => 'edit-articles']);
+    
+    $user->givePermissionTo($permission);
+    
+    expect($user->hasPermissionTo('edit-articles'))->toBeTrue();
+    expect($user->hasDirectPermission('edit-articles'))->toBeTrue();
+});
+
+it('can revoke a permission from a user', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $permission = Permission::create(['name' => 'edit-articles']);
+    
+    $user->givePermissionTo($permission);
+    expect($user->hasPermissionTo($permission))->toBeTrue();
+    
+    $user->revokePermissionTo($permission);
+    expect($user->hasPermissionTo($permission))->toBeFalse();
+});
+```
+
+<Note>
+Always test both positive and negative cases to ensure permissions work as expected.
+</Note>
+
+## Testing with Multiple Guards
+
+Test that guard separation is properly enforced.
+
+```php
+use Spatie\Permission\Exceptions\GuardDoesNotMatch;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
+
+it('throws exception when assigning permission from different guard', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $adminPermission = Permission::create([
+        'name' => 'admin-permission',
+        'guard_name' => 'admin'
+    ]);
+    
+    expect(fn() => $user->givePermissionTo($adminPermission))
+        ->toThrow(GuardDoesNotMatch::class);
+});
+
+it('can check permissions for non-default guard', function () {
+    $permission = Permission::create([
+        'name' => 'edit-articles',
+        'guard_name' => 'api'
+    ]);
+    
+    $user->givePermissionTo($permission);
+    
+    expect($user->hasPermissionTo($permission))->toBeTrue();
+});
+```
+
+<Warning>
+Always create permissions with the correct guard before testing:
+
+```php
+// ❌ This will fail - permission doesn't exist for 'web' guard
+expect(fn() => $user->hasPermissionTo('admin-permission'))
+    ->toThrow(PermissionDoesNotExist::class);
+```
+</Warning>
+
+## Testing Role Permissions
+
+Test that permissions work correctly through role assignment.
+
+```php
+it('can determine if user has permission through roles', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $role = Role::create(['name' => 'editor']);
+    $permission = Permission::create(['name' => 'edit-articles']);
+    
+    $role->givePermissionTo($permission);
+    $user->assignRole($role);
+    
+    expect($user->hasPermissionTo($permission))->toBeTrue();
+    expect($user->hasDirectPermission($permission))->toBeFalse();
+    expect($user->hasPermissionViaRole($permission))->toBeTrue();
+});
+
+it('can list all permissions via roles', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $role1 = Role::create(['name' => 'editor']);
+    $role2 = Role::create(['name' => 'author']);
+    
+    $role1->givePermissionTo('edit-articles');
+    $role2->givePermissionTo('edit-news');
+    
+    $user->assignRole('editor', 'author');
+    
+    expect($user->getPermissionsViaRoles()->pluck('name')->sort()->values())
+        ->toEqual(collect(['edit-articles', 'edit-news']));
+});
+```
+
+## Testing with Laravel Gates
+
+Verify that permissions integrate correctly with Laravel's authorization Gate.
+
+```php
+use Illuminate\Support\Facades\Gate;
+
+it('can determine if user does not have permission', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    Permission::create(['name' => 'edit-articles']);
+    
+    expect($user->can('edit-articles'))->toBeFalse();
+});
+
+it('can determine if user has direct permission', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $permission = Permission::create(['name' => 'edit-articles']);
+    
+    $user->givePermissionTo($permission);
+    
+    expect($user->can('edit-articles'))->toBeTrue();
+    expect($user->can('non-existing-permission'))->toBeFalse();
+});
+
+it('allows gate before callback to override permissions', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    Permission::create(['name' => 'edit-articles']);
+    
+    expect($user->can('edit-articles'))->toBeFalse();
+    
+    // Super admin gate
+    Gate::before(function () {
+        return true; // Override for super admin
+    });
+    
+    expect($user->can('edit-articles'))->toBeTrue();
+});
+```
+
+<Tip>
+Gate callbacks allow you to test super-admin scenarios:
+
+```php
+Gate::before(function ($user, $ability) {
+    return $user->hasRole('super-admin') ? true : null;
+});
+```
+</Tip>
+
+## Testing Middleware
+
+Test route protection with permission middleware.
+
+```php
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+
+it('guest cannot access protected route', function () {
+    $middleware = new PermissionMiddleware();
+    
+    $request = Request::create('/admin', 'GET');
+    
+    expect(function () use ($middleware, $request) {
+        $middleware->handle($request, fn() => new Response(), 'edit-articles');
+    })->toThrow(UnauthorizedException::class);
+});
+
+it('user can access route with correct permission', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-articles');
+    
+    Auth::login($user);
+    
+    $response = $this->get('/admin/articles');
+    $response->assertStatus(200);
+});
+
+it('user cannot access route without permission', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    Auth::login($user);
+    
+    $response = $this->get('/admin/articles');
+    $response->assertStatus(403);
+});
+```
+
+<Accordion title="Testing OR Permissions in Middleware">
+```php
+it('user can access route with one of multiple permissions', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-articles');
+    
+    Auth::login($user);
+    
+    // Route protected with: permission:edit-articles|edit-news
+    $response = $this->get('/admin/content');
+    $response->assertStatus(200);
+});
+```
+</Accordion>
+
+## Testing Query Scopes
+
+Test that database query scopes filter users correctly.
+
+```php
+it('can scope users using permission', function () {
+    User::create(['email' => 'user1@test.com'])
+        ->givePermissionTo(['edit-articles', 'edit-news']);
+    
+    $role = Role::create(['name' => 'editor']);
+    $role->givePermissionTo('edit-articles');
+    
+    User::create(['email' => 'user2@test.com'])
+        ->assignRole('editor');
+    
+    User::create(['email' => 'user3@test.com']);
+    
+    $editors = User::permission('edit-articles')->get();
+    $withoutNews = User::withoutPermission('edit-news')->get();
+    
+    expect($editors->count())->toEqual(2);
+    expect($withoutNews->count())->toEqual(2);
+});
+
+it('can scope users by multiple permissions', function () {
+    User::create(['email' => 'user1@test.com'])
+        ->givePermissionTo(['edit-articles', 'edit-news']);
+    
+    User::create(['email' => 'user2@test.com'])
+        ->givePermissionTo('edit-articles');
+    
+    $scopedUsers = User::permission(['edit-articles', 'edit-news'])->get();
+    
+    expect($scopedUsers->count())->toEqual(2);
+});
+```
+
+## Testing Cache Behavior
+
+Verify that cache is properly managed during permission operations.
+
+```php
+use Illuminate\Support\Facades\DB;
+
+beforeEach(function () {
+    $this->registrar = app(PermissionRegistrar::class);
+    $this->registrar->forgetCachedPermissions();
+    
+    DB::enableQueryLog();
+});
+
+function resetQueryCount(): void
+{
+    DB::flushQueryLog();
+}
+
+function assertQueryCount(int $expected): void
+{
+    expect(DB::getQueryLog())->toHaveCount($expected);
+}
+
+it('caches permissions after first load', function () {
+    resetQueryCount();
+    $this->registrar->getPermissions();
+    $initialQueries = count(DB::getQueryLog());
+    
+    resetQueryCount();
+    $this->registrar->getPermissions();
+    
+    assertQueryCount(0); // No queries - loaded from cache
+});
+
+it('flushes cache when creating permission', function () {
+    $this->registrar->getPermissions(); // Load cache
+    
+    Permission::create(['name' => 'new-permission']);
+    
+    resetQueryCount();
+    $this->registrar->getPermissions(); // Cache was flushed
+    
+    expect(count(DB::getQueryLog()))->toBeGreaterThan(0);
+});
+
+it('does not flush cache when assigning permission to user', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $this->registrar->getPermissions(); // Load cache
+    
+    $user->givePermissionTo('edit-articles');
+    
+    resetQueryCount();
+    $this->registrar->getPermissions();
+    
+    assertQueryCount(0); // Cache not flushed - optimization
+});
+```
+
+<Note>
+From `CacheTest.php:98`: User-level permission changes don't flush the global cache because they don't affect the permission structure itself. This is a performance optimization.
+</Note>
+
+## Testing Permission Sync
+
+Test that `syncPermissions()` works correctly and efficiently.
+
+```php
+it('can sync multiple permissions', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-news');
+    
+    $user->syncPermissions('edit-articles', 'edit-blog');
+    
+    expect($user->hasDirectPermission('edit-articles'))->toBeTrue();
+    expect($user->hasDirectPermission('edit-blog'))->toBeTrue();
+    expect($user->hasDirectPermission('edit-news'))->toBeFalse();
+});
+
+it('avoids sync duplicated permissions', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    
+    $user->syncPermissions('edit-articles', 'edit-blog', 'edit-blog');
+    
+    expect($user->permissions()->count())->toEqual(2);
+});
+
+it('does not detach on sync error', function () {
+    $user = User::create(['email' => 'test@example.com']);
+    $user->syncPermissions('edit-articles');
+    
+    expect(fn() => $user->syncPermissions('permission-does-not-exist'))
+        ->toThrow(PermissionDoesNotExist::class);
+    
+    expect($user->fresh()->hasDirectPermission('edit-articles'))->toBeTrue();
+});
+```
+
+## Testing with Enums
+
+Test PHP 8.1+ enum support for type-safe permissions.
+
+```php
+enum ArticlePermission: string
+{
+    case View = 'view articles';
+    case Edit = 'edit articles';
+    case Delete = 'delete articles';
+}
+
+it('can assign and check permissions using enums', function () {
+    $enum = ArticlePermission::Edit;
+    $permission = Permission::findOrCreate($enum->value, 'web');
+    
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo($enum);
+    
+    expect($user->hasPermissionTo($enum))->toBeTrue();
+    expect($user->hasAnyPermission($enum))->toBeTrue();
+    expect($user->hasDirectPermission($enum))->toBeTrue();
+});
+
+it('can revoke permissions using enums', function () {
+    $enum = ArticlePermission::Edit;
+    Permission::findOrCreate($enum->value, 'web');
+    
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo($enum);
+    $user->revokePermissionTo($enum);
+    
+    expect($user->hasPermissionTo($enum))->toBeFalse();
+});
+```
+
+## Testing Events
+
+Test that permission events fire correctly when enabled.
+
+```php
+use Illuminate\Support\Facades\Event;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+use Spatie\Permission\Events\PermissionDetachedEvent;
+
+it('fires event when permission is added', function () {
+    Event::fake();
+    config()->set('permission.events_enabled', true);
+    
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo(['edit-articles', 'edit-news']);
+    
+    Event::assertDispatched(PermissionAttachedEvent::class, function ($event) use ($user) {
+        return $event->model instanceof User
+            && $event->model->id === $user->id
+            && count($event->permissionsOrIds) === 2;
+    });
+});
+
+it('does not fire event when events are disabled', function () {
+    Event::fake();
+    config()->set('permission.events_enabled', false);
+    
+    $user = User::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-articles');
+    
+    Event::assertNotDispatched(PermissionAttachedEvent::class);
+});
+
+it('fires event when permission is removed', function () {
+    Event::fake();
+    config()->set('permission.events_enabled', true);
+    
+    $user = User::create(['email' => 'test@example.com']);
+    $permissions = Permission::whereIn('name', ['edit-articles', 'edit-news'])->get();
+    
+    $user->givePermissionTo($permissions);
+    $user->revokePermissionTo($permissions);
+    
+    Event::assertDispatched(PermissionDetachedEvent::class, function ($event) use ($user) {
+        return $event->model instanceof User
+            && !$event->model->hasPermissionTo('edit-news')
+            && !$event->model->hasPermissionTo('edit-articles');
+    });
+});
+```
+
+<Warning>
+Don't forget to enable events in your test configuration:
+
+```php
+config()->set('permission.events_enabled', true);
+```
+</Warning>
+
+## Testing Soft Deletes
+
+Verify that permissions are preserved during soft deletes.
+
+```php
+use App\Models\SoftDeletingUser;
+
+it('does not detach permissions when user soft deletes', function () {
+    $user = SoftDeletingUser::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-news');
+    
+    $user->delete(); // Soft delete
+    
+    $user = SoftDeletingUser::withTrashed()->find($user->id);
+    
+    expect($user->hasPermissionTo('edit-news'))->toBeTrue();
+});
+
+it('detaches permissions on force delete', function () {
+    $user = SoftDeletingUser::create(['email' => 'test@example.com']);
+    $user->givePermissionTo('edit-news');
+    
+    $userId = $user->id;
+    $user->forceDelete();
+    
+    // Verify pivot records are removed
+    $pivotRecords = DB::table('model_has_permissions')
+        ->where('model_id', $userId)
+        ->count();
+    
+    expect($pivotRecords)->toEqual(0);
+});
+```
+
+## Factory Patterns for Testing
+
+Create reusable factories for test permissions and roles.
+
+```php database/factories/PermissionFactory.php
+use Spatie\Permission\Models\Permission;
+
+class PermissionFactory extends Factory
+{
+    protected $model = Permission::class;
+    
+    public function definition(): array
+    {
+        return [
+            'name' => $this->faker->unique()->word,
+            'guard_name' => 'web',
+        ];
+    }
+    
+    public function forGuard(string $guard): self
+    {
+        return $this->state(['guard_name' => $guard]);
+    }
+}
+```
+
+```php
+// In your tests
+it('can create permissions with factory', function () {
+    $permission = Permission::factory()->create(['name' => 'edit-articles']);
+    $adminPermission = Permission::factory()->forGuard('admin')->create();
+    
+    $user = User::factory()->create();
+    $user->givePermissionTo($permission);
+    
+    expect($user->hasPermissionTo('edit-articles'))->toBeTrue();
+});
+```
+
+<Tip>
+Create test helpers for common permission scenarios:
+
+```php tests/Helpers/PermissionHelpers.php
+function createUserWithPermissions(array $permissions): User
+{
+    $user = User::factory()->create();
+    $user->givePermissionTo($permissions);
+    return $user;
+}
+
+function createUserWithRole(string $roleName, array $permissions = []): User
+{
+    $role = Role::create(['name' => $roleName]);
+    $role->givePermissionTo($permissions);
+    $user = User::factory()->create();
+    $user->assignRole($role);
+    return $user;
+}
+```
+</Tip>

@@ -1,0 +1,380 @@
+---
+title: 'Assigning Permissions'
+description: 'Learn how to assign permissions and roles to users'
+---
+
+Once you've created permissions and roles, you can assign them to your users. Laravel Permission provides flexible methods for managing user permissions both directly and through roles.
+
+<Note>
+  Your User model must use the `HasRoles` trait to access these methods.
+</Note>
+
+## Assigning Roles to Users
+
+Users can have multiple roles, and roles determine what permissions users have.
+
+<Tabs>
+  <Tab title="Assign Role">
+    Give one or more roles to a user:
+
+    ```php
+    use Spatie\Permission\Models\Role;
+
+    $user = User::find(1);
+
+    // Assign single role (string)
+    $user->assignRole('writer');
+
+    // Assign single role (Role model)
+    $role = Role::findByName('writer');
+    $user->assignRole($role);
+
+    // Assign multiple roles
+    $user->assignRole('writer', 'editor');
+    $user->assignRole(['writer', 'editor']);
+    ```
+
+    <Tip>
+      If the user already has the role, it won't be assigned again. The method is idempotent.
+    </Tip>
+  </Tab>
+
+  <Tab title="Remove Role">
+    Revoke roles from a user:
+
+    ```php
+    // Remove single role
+    $user->removeRole('writer');
+
+    // Remove multiple roles
+    $user->removeRole('writer', 'editor');
+    $user->removeRole(['writer', 'editor']);
+    ```
+  </Tab>
+
+  <Tab title="Sync Roles">
+    Replace all roles with a new set:
+
+    ```php
+    // Remove all existing roles and assign only these
+    $user->syncRoles(['writer', 'editor']);
+
+    // Remove all roles
+    $user->syncRoles([]);
+    ```
+
+    <Warning>
+      `syncRoles()` removes ALL existing roles before assigning new ones.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Assigning Direct Permissions to Users
+
+Besides inheriting permissions through roles, users can also have direct permissions.
+
+<Tabs>
+  <Tab title="Give Permission">
+    Grant permissions directly to a user:
+
+    ```php
+    $user = User::find(1);
+
+    // Single permission (string)
+    $user->givePermissionTo('edit articles');
+
+    // Multiple permissions
+    $user->givePermissionTo('edit articles', 'delete articles');
+    $user->givePermissionTo(['edit articles', 'delete articles']);
+
+    // Using Permission model
+    $permission = Permission::findByName('edit articles');
+    $user->givePermissionTo($permission);
+    ```
+
+    <Note>
+      Direct permissions are useful for granting special access to specific users without creating a new role.
+    </Note>
+  </Tab>
+
+  <Tab title="Revoke Permission">
+    Remove direct permissions from a user:
+
+    ```php
+    // Revoke single permission
+    $user->revokePermissionTo('edit articles');
+
+    // This only removes DIRECT permissions
+    // If the user has the permission via a role, they'll still have access
+    ```
+  </Tab>
+
+  <Tab title="Sync Permissions">
+    Replace all direct permissions:
+
+    ```php
+    // Remove all direct permissions and assign only these
+    $user->syncPermissions(['edit articles', 'publish articles']);
+
+    // Remove all direct permissions
+    $user->syncPermissions([]);
+    ```
+
+    <Warning>
+      This only affects direct permissions, not permissions inherited through roles.
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Understanding Permission Sources
+
+Users can have permissions from two sources:
+
+<Steps>
+  <Step title="Direct Permissions">
+    Permissions assigned directly to the user:
+
+    ```php
+    // Get only direct permissions
+    $directPermissions = $user->permissions;
+    // or
+    $directPermissions = $user->getDirectPermissions();
+    ```
+  </Step>
+
+  <Step title="Role Permissions">
+    Permissions inherited from the user's roles:
+
+    ```php
+    // Get permissions via roles
+    $rolePermissions = $user->getPermissionsViaRoles();
+    ```
+  </Step>
+
+  <Step title="All Permissions">
+    Combined permissions from both sources:
+
+    ```php
+    // Get all permissions (direct + via roles)
+    $allPermissions = $user->getAllPermissions();
+    ```
+  </Step>
+</Steps>
+
+## Combining Roles and Direct Permissions
+
+You can use both roles and direct permissions together:
+
+```php
+$user = User::find(1);
+
+// Assign a base role
+$user->assignRole('writer');
+// Now user has: 'edit articles' (via role)
+
+// Grant additional direct permission
+$user->givePermissionTo('publish articles');
+// Now user has: 'edit articles' (via role) + 'publish articles' (direct)
+```
+
+<Tip>
+  **Best Practice**: Use roles for standard permissions and direct permissions for exceptions.
+
+  Example: All writers can edit articles (via role), but only some writers can publish (via direct permission).
+</Tip>
+
+## Method Signatures
+
+Here are the key method signatures from the `HasRoles` trait:
+
+<CodeGroup>
+
+```php assignRole
+public function assignRole(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): static
+```
+
+```php removeRole
+public function removeRole(
+    string|int|array|Role|Collection|BackedEnum ...$role
+): static
+```
+
+```php syncRoles
+public function syncRoles(
+    string|int|array|Role|Collection|BackedEnum ...$roles
+): static
+```
+
+</CodeGroup>
+
+And from the `HasPermissions` trait:
+
+<CodeGroup>
+
+```php givePermissionTo
+public function givePermissionTo(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): static
+```
+
+```php revokePermissionTo
+public function revokePermissionTo(
+    Permission|Permission[]|string|string[]|BackedEnum $permission
+): static
+```
+
+```php syncPermissions
+public function syncPermissions(
+    string|int|array|Permission|Collection|BackedEnum ...$permissions
+): static
+```
+
+</CodeGroup>
+
+## Assigning During User Creation
+
+You can assign roles and permissions when creating users:
+
+```php
+$user = User::create([
+    'name' => 'John Doe',
+    'email' => 'john@example.com',
+    'password' => bcrypt('secret'),
+]);
+
+// Assign roles and permissions
+$user->assignRole('writer');
+$user->givePermissionTo('edit articles');
+```
+
+<Note>
+  The user must be saved to the database before assigning roles or permissions. If you try to assign to an unsaved model, the assignments will be queued and applied when the model is saved.
+</Note>
+
+## Working with Multiple Guards
+
+When using multiple authentication guards:
+
+```php
+// User with web guard
+$webUser = User::find(1);
+$webUser->assignRole('admin'); // Assigns web guard role
+
+// API user with api guard
+$apiUser = ApiUser::find(1);
+$apiUser->assignRole('admin'); // Assigns api guard role
+
+// Explicitly specify guard
+$user->assignRole(Role::findByName('admin', 'api'));
+```
+
+<Warning>
+  Roles and permissions must match the user's guard. You'll get a `GuardDoesNotMatch` exception if they don't match.
+</Warning>
+
+## Bulk Assignment
+
+Assign roles and permissions to multiple users:
+
+```php
+// Get multiple users
+$users = User::whereIn('id', [1, 2, 3])->get();
+
+// Assign same role to all
+foreach ($users as $user) {
+    $user->assignRole('writer');
+}
+
+// Or using query builder
+User::whereIn('id', [1, 2, 3])
+    ->each(fn($user) => $user->assignRole('writer'));
+```
+
+## Event Handling
+
+Laravel Permission fires events when roles and permissions are assigned:
+
+```php
+use Spatie\Permission\Events\RoleAttachedEvent;
+use Spatie\Permission\Events\PermissionAttachedEvent;
+
+// Listen for role assignments
+Event::listen(RoleAttachedEvent::class, function ($event) {
+    $model = $event->model; // The user
+    $roleIds = $event->roleIds; // Array of role IDs
+});
+
+// Listen for permission assignments
+Event::listen(PermissionAttachedEvent::class, function ($event) {
+    $model = $event->model; // The user
+    $permissionIds = $event->permissionIds; // Array of permission IDs
+});
+```
+
+<Note>
+  Events are only fired if `permission.events_enabled` is set to `true` in your config.
+</Note>
+
+## Common Patterns
+
+<AccordionGroup>
+  <Accordion title="New User Default Role">
+    Automatically assign a role to new users:
+
+    ```php
+    // In User model
+    protected static function booted()
+    {
+        static::created(function ($user) {
+            $user->assignRole('user');
+        });
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Promotion/Demotion">
+    Change user roles based on actions:
+
+    ```php
+    public function promoteToEditor(User $user)
+    {
+        $user->removeRole('writer');
+        $user->assignRole('editor');
+    }
+
+    public function demoteToWriter(User $user)
+    {
+        $user->removeRole('editor');
+        $user->assignRole('writer');
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Temporary Permissions">
+    Grant temporary additional permissions:
+
+    ```php
+    // Grant extra permission for specific task
+    $user->givePermissionTo('delete articles');
+
+    // Perform task
+    $article->delete();
+
+    // Revoke the permission
+    $user->revokePermissionTo('delete articles');
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Checking Permissions" icon="shield-check" href="/basic-usage/checking-permissions">
+    Learn how to check if users have permissions
+  </Card>
+  <Card title="Blade Directives" icon="code" href="/basic-usage/using-blade-directives">
+    Use permissions in your Blade templates
+  </Card>
+</CardGroup>
